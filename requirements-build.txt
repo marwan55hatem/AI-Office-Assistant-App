@@ -1,0 +1,3 @@
+# Packaging the Windows installer (see docs/DEPLOYMENT.md)
+-r requirements.txt
+pyinstaller>=6.10

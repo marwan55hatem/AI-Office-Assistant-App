@@ -1,0 +1,131 @@
+training sentences : 6144  (20 intents, 548 example phrases)
+trained in 30.4 s, saved D:\Learning\AOU\TM 471 B\desktop_ai_office_assistant\assistant\intent_model.pt (1033 KB)
+
+accuracy on training sentences (sample)        : 100.0 %
+accuracy on test set 1 (used while tuning)     : 87.6 %  (113 questions)
+accuracy on test set 2 (fresh, never tuned on) : 79.5 %  (112 questions)  <- honest figure
+
+per intent (test set 2):
+  greeting           3/5
+  thanks             2/4
+  goodbye            2/4
+  capabilities       3/4
+  list_tasks         6/7
+  task_howto         7/7
+  task_deadlines     4/6
+  task_next          4/6
+  calendar_today     5/6
+  calendar_upcoming  4/6
+  my_stats           5/6
+  team_status        6/6
+  active_now         4/5
+  best_performer     6/6
+  check_in           3/6
+  absent             3/5
+  weekly_summary     5/5
+  employee_status    6/6
+  unknown            11/12
+
+mistakes on test set 2:
+  'hello assistant, good to see you'
+      wanted greeting         got goodbye          (0.56)
+  'hey, anyone there?'
+      wanted greeting         got active_now       (0.93)
+  'wonderful, thank you'
+      wanted thanks           got unknown          (0.39)
+  'شكرا على المساعدة'
+      wanted thanks           got unknown          (0.18)
+  'see you next time'
+      wanted goodbye          got unknown          (0.36)
+  'الى اللقاء غدا'
+      wanted goodbye          got unknown          (0.19)
+  'which topics can you help with'
+      wanted capabilities     got unknown          (0.35)
+  'which assignments are still outstanding for me'
+      wanted list_tasks       got unknown          (0.34)
+  'which of my assignments should be turned in soonest'
+      wanted task_deadlines   got task_next        (0.58)
+  'what falls due in the coming days'
+      wanted task_deadlines   got calendar_upcoming (0.98)
+  'what ought i to begin with this morning'
+      wanted task_next        got task_howto       (0.65)
+  'pick my starting task for me'
+      wanted task_next        got task_howto       (0.54)
+  'هل لدي موعد اليوم'
+      wanted calendar_today   got task_deadlines   (0.80)
+  'what is on for the rest of the week'
+      wanted calendar_upcoming got weekly_summary   (0.45)
+  'do i have appointments tomorrow'
+      wanted calendar_upcoming got unknown          (0.23)
+  'كيف كان تركيزي اليوم'
+      wanted my_stats         got unknown          (0.29)
+  'which employees have a running session'
+      wanted active_now       got unknown          (0.38)
+  'which staff members may need some support'
+      wanted check_in         got unknown          (0.21)
+  'who should i be concerned about'
+      wanted check_in         got unknown          (0.31)
+  'which person is distracted the most'
+      wanted check_in         got best_performer   (0.68)
+  "which employees haven't started working"
+      wanted absent           got active_now       (0.40)
+  'is someone away from their desk all day'
+      wanted absent           got unknown          (0.35)
+  'who is the king of england'
+      wanted unknown          got best_performer   (0.69)
+
+accuracy on test set 3 (written last, not tuned on) : 85.3 %  (109 questions)  <- final figure
+  greeting           4/5
+  thanks             4/5
+  goodbye            2/5
+  capabilities       4/4
+  list_tasks         6/7
+  task_howto         6/6
+  task_deadlines     6/6
+  task_next          5/5
+  calendar_today     4/5
+  calendar_upcoming  5/5
+  my_stats           4/5
+  recall             4/4
+  team_status        5/5
+  active_now         3/4
+  best_performer     6/6
+  check_in           3/5
+  absent             5/5
+  weekly_summary     4/5
+  employee_status    5/5
+  unknown            8/12
+
+mistakes on test set 3:
+  'ahlan wa sahlan'
+      wanted greeting         got task_howto       (0.69)
+  'جزاك الله خيرا'
+      wanted thanks           got unknown          (0.39)
+  "i'm logging off now"
+      wanted goodbye          got unknown          (0.20)
+  'سلام'
+      wanted goodbye          got greeting         (0.62)
+  'until next time'
+      wanted goodbye          got task_next        (0.57)
+  "what's on my agenda of tasks"
+      wanted list_tasks       got calendar_upcoming (0.97)
+  'show me my agenda for the day'
+      wanted calendar_today   got calendar_upcoming (0.95)
+  'what is my distraction level'
+      wanted my_stats         got unknown          (0.36)
+  'is the team working right now'
+      wanted active_now       got team_status      (0.63)
+  'who should i speak with about focus'
+      wanted check_in         got task_next        (0.52)
+  'who is the most distracted person today'
+      wanted check_in         got best_performer   (0.65)
+  "i'd like a weekly performance overview"
+      wanted weekly_summary   got my_stats         (0.55)
+  'can you help me write a cover letter'
+      wanted unknown          got capabilities     (0.51)
+  'what should i cook tonight'
+      wanted unknown          got task_next        (0.91)
+  'how do i fix my car'
+      wanted unknown          got task_howto       (0.70)
+  'give me a workout plan'
+      wanted unknown          got task_howto       (0.70)

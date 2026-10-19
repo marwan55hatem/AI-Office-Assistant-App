@@ -1,0 +1,30 @@
+# Desktop AI Office Assistant -- runtime dependencies (Python 3.12, Windows 10/11 x64).
+# These are the exact versions the project was built and tested with.
+#
+# PyTorch with CUDA 12.4 (NVIDIA GPU) comes from PyTorch's own index:
+#   pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu124
+# Without an NVIDIA GPU, the CPU wheels also work (the app falls back to CPU automatically).
+
+# UI
+PyQt5==5.15.11
+
+# Computer vision
+opencv-python==5.0.0.93
+ultralytics==8.4.174
+
+# Deep learning
+torch==2.6.0
+torchvision==0.21.0
+numpy==2.5.2
+
+# AI / NLP (BART summariser, MarianMT translator, Qwen2.5 chat model)
+transformers==5.19.0
+huggingface_hub==1.33.0
+safetensors==0.8.0
+sentencepiece==0.2.2
+
+# PDF reading (AI Helper)
+PyMuPDF==1.28.2
+
+# Windows active-window and idle detection
+pywin32==312

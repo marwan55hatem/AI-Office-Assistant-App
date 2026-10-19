@@ -1,0 +1,4 @@
+# Development tools only (not needed to run the application)
+-r requirements.txt
+pytest>=8.0
+pyflakes>=3.0

@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Build output (PyInstaller / Inno Setup)
+build/
+dist/
+
+# Local data: the real database, its backups and logs (contain user data and passwords)
+data/
+*.db
+*.db.*.bak
+*.bak
+logs/
+
+# AI model weights (multi-GB; fetched with: python tools/fetch_models.py)
+models/
+*.pt
+!assistant/intent_model.pt
+
+# Scratch screenshots of test runs
+screenshots_redesign/*.tmp.png
