@@ -7,6 +7,7 @@ Three independent checks:
 3. PostgreSQL Row-Level Security alone (raw SQL as the app role, no repository).
 """
 import uuid
+from datetime import date
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -24,12 +25,17 @@ from tests.conftest import add_active_employee, auth, join_with_code, register
 def seed_every_table(owner_engine, company_id, manager_id, employee_id) -> dict:
     """Give a company one row in every tenant table (owner connection, so RLS is bypassed)."""
     ids = {"session": uuid.uuid4(), "task": uuid.uuid4(), "calendar": uuid.uuid4(), "document": uuid.uuid4(),
-           "meeting": uuid.uuid4(), "invite": uuid.uuid4(), "refresh": uuid.uuid4()}
+           "meeting": uuid.uuid4(), "invite": uuid.uuid4(), "refresh": uuid.uuid4(), "chat": uuid.uuid4(),
+           "manager_chat": uuid.uuid4()}
     p = {"c": company_id, "m": manager_id, "e": employee_id, **ids}
     statements = [
-        "INSERT INTO sessions (id, company_id, user_id, started_at) VALUES (:session, :c, :e, now())",
-        "INSERT INTO events (company_id, session_id, user_id, event_type, occurred_at, app_name) "
-        "VALUES (:c, :session, :e, 'focus', now(), 'Code')",
+        "INSERT INTO sessions (id, company_id, user_id, local_date, started_at, last_seen_at, focus_seconds) "
+        "VALUES (:session, :c, :e, current_date, now(), now(), 600)",
+        "INSERT INTO events (company_id, client_event_id, session_id, user_id, event_type, occurred_at, app_name) "
+        "VALUES (:c, gen_random_uuid(), :session, :e, 'focus', now(), 'Code')",
+        "INSERT INTO ai_chats (id, company_id, user_id, title) VALUES (:chat, :c, :e, 'secret chat')",
+        "INSERT INTO ai_chats (id, company_id, user_id, title) VALUES (:manager_chat, :c, :m, 'secret manager chat')",
+        "INSERT INTO ai_messages (company_id, chat_id, role, content) VALUES (:c, :chat, 'user', 'secret question')",
         "INSERT INTO tasks (id, company_id, user_id, assigned_by, title) VALUES (:task, :c, :e, :m, 'secret task')",
         "INSERT INTO calendar_events (id, company_id, title, event_date, created_by) "
         "VALUES (:calendar, :c, 'secret meeting', current_date, :m)",
@@ -72,12 +78,26 @@ def two_companies(client, owner_engine):
 
 def _secrets_of(b) -> list[str]:
     return [str(b["company_id"]), str(b["manager_id"]), str(b["employee_id"]), str(b["pending_id"]),
-            b["join_code"], "@b-corp.com", "Company B", str(b["invite"])]
+            b["join_code"], "@b-corp.com", "Company B", str(b["invite"]), str(b["session"]), str(b["task"]),
+            str(b["calendar"]), str(b["document"]), str(b["chat"]), "Worker B", "Boss B"]
 
 
 # ---------------------------------------------------------------- 1. API
 #: for each path parameter, which of company B's ids to try
-PARAM_TARGETS = {"user_id": ["employee_id", "pending_id", "manager_id"], "invite_id": ["invite"]}
+PARAM_TARGETS = {
+    "user_id": ["employee_id", "pending_id", "manager_id"], "invite_id": ["invite"], "session_id": ["session"],
+    "task_id": ["task"], "event_id": ["calendar"], "chat_id": ["chat", "manager_chat"], "doc_id": ["document"],
+}
+#: a valid body for each write, so the request reaches the lookup (and is not just rejected as invalid)
+BODIES = {
+    ("PATCH", "/users/{user_id}/status"): {"status": "disabled"},
+    ("PATCH", "/tasks/{task_id}/deadline"): {"deadline_date": "2030-01-01"},
+    ("PATCH", "/calendar/{event_id}"): {"title": "hijacked"},
+    ("PUT", "/calendar/{event_id}/attendees"): {"user_ids": []},
+    ("PATCH", "/ai/chats/{chat_id}"): {"title": "hijacked"},
+    ("POST", "/ai/chats/{chat_id}/messages"): {"role": "user", "content": "hijacked"},
+    ("PATCH", "/documents/{doc_id}"): {"visibility": "everyone"},
+}
 
 
 def _routes(app):
@@ -104,15 +124,26 @@ def test_every_route_with_an_id_hides_other_companies(client, two_companies):
         assert len(params) == 1, f"add the parameters of {path} to PARAM_TARGETS"
         for target in PARAM_TARGETS[params[0]]:
             url = path.replace("{" + params[0] + "}", str(b[target]))
-            body = {"status": "disabled"} if method == "PATCH" else None
+            body = BODIES.get((method, path))
             for who in ("manager", "employee"):
                 response = client.request(method, url, json=body, headers=auth(a[who]))
                 assert response.status_code in (403, 404), f"{who} of A got {response.status_code} on {method} {url}"
                 checked += 1
-    assert checked >= 10
+    assert checked >= 40
     # and nothing of B was changed by those attempts
     statuses = {u["email"]: u["status"] for u in client.get("/users", headers=auth(b["manager"])).json()}
     assert statuses == {"boss@b-corp.com": "active", "worker@b-corp.com": "active", "pending@b-corp.com": "pending"}
+
+
+#: query parameters that make each list endpoint return as much as it can
+WIDE_QUERY = {
+    "/stats/today": {"day": str(date.today())},
+    "/stats/range": {"start": "2000-01-01", "end": "2100-01-01"},
+    "/tasks": {"everyone": "true"},
+    "/documents": {"with_content": "true"},
+    "/events/recent": {"limit": "200"},
+    "/calendar": {"start": "2000-01-01", "end": "2100-01-01"},
+}
 
 
 def test_no_response_to_company_a_mentions_company_b(client, two_companies):
@@ -122,11 +153,24 @@ def test_no_response_to_company_a_mentions_company_b(client, two_companies):
         if method != "GET" or "{" in path:
             continue
         for who in ("manager", "employee"):
-            body = client.get(path, headers=auth(a[who])).text
+            response = client.get(path, params=WIDE_QUERY.get(path), headers=auth(a[who]))
+            if who == "manager":
+                assert response.status_code == 200, f"GET {path} as manager: {response.status_code} {response.text}"
             checked += 1
             for secret in _secrets_of(b):
-                assert secret not in body, f"GET {path} as {who} of A leaked {secret!r}"
-    assert checked >= 8
+                assert secret not in response.text, f"GET {path} as {who} of A leaked {secret!r}"
+    assert checked >= 20
+
+
+def test_company_a_data_is_visible_to_a(client, two_companies):
+    """The sweep above is only meaningful if A's own data does come back."""
+    a = two_companies["A"]
+    headers = auth(a["manager"])
+    assert str(a["session"]) in client.get("/sessions", headers=headers).text
+    assert str(a["task"]) in client.get("/tasks", params={"everyone": "true"}, headers=headers).text
+    assert str(a["document"]) in client.get("/documents", headers=headers).text
+    today = client.get("/stats/today", params={"day": str(date.today())}, headers=headers).json()
+    assert today["totals"]["focus_seconds"] == 600
 
 
 def test_list_endpoints_return_only_own_company(client, two_companies):

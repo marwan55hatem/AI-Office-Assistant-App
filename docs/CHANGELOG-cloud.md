@@ -34,3 +34,51 @@ break of the repository filter was caught by 12 tests. The desktop app is unchan
 - The rate limiter keeps counters in memory (one server process); use a shared store if the API is
   scaled to several instances.
 - One account per e-mail address across the whole service.
+
+## Phase 2: the desktop app uses the online database
+
+**Backend** (migration `0002`)
+- New endpoints: `POST /sessions/sync` (idempotent batches of sessions and events), `GET /sessions`,
+  `/sessions/{id}`, `/sessions/{id}/events`, `GET /stats/today`, `/stats/range`, `/events/recent`,
+  `/tasks` (+ toggle, deadline, delete), `/calendar` (+ attendees), `/ai/chats` (+ messages),
+  `/documents`, `PATCH /users/me`, `POST /auth/change-password`, `GET /users?role=`.
+- Sessions use the id the desktop app generates (so it can record offline) and store the employee's
+  local date, so "today" and "last 7 days" are counted in local days as before. A session counts as
+  running only while the app sent data in the last 2 minutes, so a crashed app does not stay "working".
+- Events carry a client id: a batch sent twice is stored once. Counters only grow.
+- New tables `ai_chats` and `ai_messages` (private to their owner, even from managers), with RLS.
+- Rules: employees see and create only their own tasks and cannot delete assigned ones; only managers
+  write calendar events and documents; managers-only documents never reach employees.
+- Fix: presenting a refresh token that was revoked by sign-out or a password change no longer ends
+  the user's other sessions; only a reused *rotated* token does (theft detection).
+
+**Desktop app** (new `cloud/` package)
+- `RemoteDatabase` offers the same methods and return shapes as `DatabaseManager`, so the screens
+  barely changed; `main.App` picks it unless `OFFICE_BACKEND=local`. Server address: `OFFICE_API_URL`.
+- Sign-in with the work e-mail and password; the role comes from the account (the Manager/Employee
+  toggle is gone). "Keep me signed in" stores only the refresh token, in Windows Credential Manager,
+  and the app reopens signed in. Sign-out deletes it.
+- Joining: the sign-up screen asks for the company code or an invite link.
+- Work sessions record into a local outbox (`%LOCALAPPDATA%\OfficeAssistant\outbox.db`) and are sent
+  every 5 seconds; running counters are sent every 5 seconds too, so managers see live numbers and a
+  network drop loses nothing. Queued data is sent on exit.
+- Offline banner; pages that need the server are greyed out; Session, AI Helper and Settings keep working.
+- Ids are UUID strings online: the session page and the session history no longer assume numbers.
+
+**Plain-text passwords removed**
+- The local SQLite database now stores salted scrypt hashes and converts existing plain-text passwords
+  on first start; password rows are never handed to the UI. Changing a password checks the current one
+  in the database/server, not in the screen. Minimum length 8 (the server's rule).
+- **The admin panel (`admin.py`, `admin_ui/`) was removed**, with its 10 tests and its program in the
+  installer: it edited plain-text passwords in a local file that the online app no longer uses.
+  Managers approve, disable and invite people in the app (and on the website, Phase 8).
+
+**Tests**: backend 85 passed (1 skipped: the chat-engine check needs PyTorch on the server, Phase 3),
+including the desktop client against the real API. Desktop 177 passed (167 − 10 admin + 20 new).
+An end-to-end run of the real window against a running server passed 11/11 (sign-in for both roles,
+every page, offline banner and recovery, remembered sign-in, sign-out). It found and fixed one bug:
+the sync thread's stop flag hid a method of Python's `Thread`, so closing the app would have failed.
+
+**Not done in this phase**: the user guide, README and install notes still describe the admin panel
+and the role toggle; they are updated in Phase 9 as planned. The webcam session was exercised by tests
+and the page's tick code, not by a live camera run.

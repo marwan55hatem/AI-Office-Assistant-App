@@ -7,7 +7,6 @@
 #define MyAppVersion   "1.0.0"
 #define MyAppPublisher "TM471B - Arab Open University"
 #define MyAppExe       "OfficeAssistant.exe"
-#define MyAdminExe     "OfficeAssistant-Admin.exe"
 ; Both can be overridden on the command line: iscc /DSourceDir=... /DOutDir=... installer.iss
 #ifndef SourceDir
   #define SourceDir    "..\dist\OfficeAssistant"
@@ -56,7 +55,6 @@ Source: "..\docs\TROUBLESHOOTING.md"; DestDir: "{app}\docs"; Flags: ignoreversio
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"
-Name: "{group}\{#MyAppName} Admin"; Filename: "{app}\{#MyAdminExe}"
 Name: "{group}\User guide"; Filename: "{app}\docs\USER_GUIDE.md"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; Tasks: desktopicon

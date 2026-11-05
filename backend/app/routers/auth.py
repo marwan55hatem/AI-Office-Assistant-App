@@ -6,7 +6,8 @@ from app.core.deps import CurrentUser
 from app.core.ratelimit import login_limiter
 from app.repositories.tenant import CompanyRepository
 from app.schemas.auth import (
-    CompanyOut, Join, JoinResult, Login, MeOut, RefreshRequest, RegisterCompany, TokenPair, UserOut,
+    CompanyOut, Join, JoinResult, Login, MeOut, PasswordChange, RefreshRequest, RegisterCompany, TokenPair,
+    UserOut,
 )
 from app.services import auth_service
 from app.services.auth_service import AuthError
@@ -82,3 +83,13 @@ def me(principal: CurrentUser):
     if not principal.is_manager:
         company_out.join_code = None          # only managers hand out the join code
     return MeOut(user=UserOut.model_validate(principal.user), company=company_out)
+
+
+@router.post("/change-password", response_model=TokenPair)
+def change_password(body: PasswordChange, principal: CurrentUser, request: Request):
+    _limit(request, principal.user.email, "password")
+    try:
+        return auth_service.change_password(principal.session, principal.user, body.current_password,
+                                            body.new_password)
+    except AuthError as error:
+        _fail(error)

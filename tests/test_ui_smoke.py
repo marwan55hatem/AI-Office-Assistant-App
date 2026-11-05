@@ -57,7 +57,6 @@ def test_login_rejects_a_wrong_password_and_accepts_the_right_one(app, db):
     screen = LoginScreen(db=db)
     seen = []
     screen.login_success.connect(seen.append)
-    screen.employee_button.click()
     screen.username_input.setText("marwan")
     screen.password_input.setText("wrong")
     screen.login_button.click()
@@ -65,7 +64,9 @@ def test_login_rejects_a_wrong_password_and_accepts_the_right_one(app, db):
     assert seen == []
     screen.password_input.setText("1234")
     screen.login_button.click()
+    # the role comes from the account (there is no Manager / Employee toggle any more)
     assert seen == ["employee"] and screen.logged_in_user["username"] == "marwan"
+    assert "password" not in screen.logged_in_user          # the hash never reaches the UI
 
 
 def test_signup_validates_and_stores_a_pending_request(app, db):
@@ -77,10 +78,27 @@ def test_signup_validates_and_stores_a_pending_request(app, db):
     assert done == [] and screen.error_label.text()
     screen.full_name_input.setText("New Person")
     screen.username_input.setText("newperson")
+    screen.password_input.setText("abcdefgh")
+    screen.confirm_input.setText("abcdefgh")
+    screen.submit_button.click()                                    # no company code yet
+    assert db.get_user_status("newperson", "employee") is None and screen.error_label.text()
+    screen.code_input.setText("ab12cd34")
     screen.password_input.setText("abcd")
     screen.confirm_input.setText("abcd")
+    screen.submit_button.click()                                    # too short (8 needed)
+    assert db.get_user_status("newperson", "employee") is None
+    screen.password_input.setText("abcdefgh")
+    screen.confirm_input.setText("abcdefgh")
     screen.submit_button.click()
     assert db.get_user_status("newperson", "employee") == "pending"
+
+
+def test_join_screen_reads_a_code_or_an_invite_link():
+    from ui.signup_screen import split_code
+    assert split_code(" ab12cd34 ") == ("AB12CD34", None)
+    token = "x" * 43
+    assert split_code(f"https://office.example/join?invite={token}") == (None, token)
+    assert split_code(token) == (None, token)
 
 
 # ------------------------------------------------------------------ chat screen with fakes

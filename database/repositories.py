@@ -40,6 +40,7 @@ class UserRepo(_Repository):
 
     METHODS = (
         "get_user", "get_user_by_id", "get_all_employees", "get_all_users", "get_user_status",
+        "sign_in", "restore_sign_in", "sign_out", "change_password", "join",
         "update_user_profile", "update_user_password", "update_user",
         "create_signup_request", "get_pending_users", "approve_user", "reject_user",
         "delete_user_cascade", "reset_employee_passwords",
@@ -51,7 +52,7 @@ class SessionRepo(_Repository):
     """Work sessions and the reports computed from them."""
 
     METHODS = (
-        "create_session", "end_session", "get_today_sessions", "get_all_sessions_today",
+        "create_session", "update_session_progress", "end_session", "get_today_sessions", "get_all_sessions_today",
         "get_sessions_history", "get_weekly_report", "get_weekly_report_all",
         "get_today_totals", "get_today_totals_per_user", "get_active_session_count_today",
         "get_active_employees_today", "get_employee_status_today",

@@ -97,3 +97,11 @@ def find_invite(session: Session, token_hash: str):
 
 def email_taken(session: Session, email: str) -> bool:
     return bool(session.execute(text("SELECT auth_email_taken(:email)"), {"email": email}).scalar())
+
+
+class AIChatRepository(TenantRepository[models.AIChat]):
+    model = models.AIChat
+
+
+class AIMessageRepository(TenantRepository[models.AIMessage]):
+    model = models.AIMessage

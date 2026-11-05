@@ -83,8 +83,9 @@ def login(email: str, password: str) -> dict:
 
 
 def refresh(refresh_token: str) -> dict:
-    """Rotate: the old refresh token is revoked and a new pair is issued. Presenting an
-    already revoked token is treated as theft and revokes every token of that user."""
+    """Rotate: the old refresh token is revoked and a new pair is issued. Presenting a token
+    that was already rotated is treated as theft and revokes every token of that user; a
+    token revoked by sign-out, a password change or disabling is simply refused."""
     try:
         claims = security.decode_token(refresh_token, security.REFRESH)
     except security.TokenError:
@@ -97,8 +98,12 @@ def refresh(refresh_token: str) -> dict:
         if stored is None or stored.user_id != user_id:
             raise AuthError("The session expired, please sign in again", 401)
         if stored.revoked_at is not None:
-            tokens.revoke_all_for_user(user_id)      # committed below, then rejected
-            reused = True
+            if stored.replaced_by is not None:
+                # a token that was already rotated is being used again: someone copied it
+                tokens.revoke_all_for_user(user_id)  # committed below, then rejected
+                reused = True
+            else:
+                raise AuthError("The session expired, please sign in again", 401)   # signed out
         else:
             user = repos.UserRepository(session, company_id).get(user_id)
             if user is None or user.status != "active" or stored.expires_at <= datetime.now(UTC):
@@ -153,3 +158,15 @@ def join(full_name: str, email: str, password: str, invite_token: str | None, co
                 invites.update(invites.get(invite.id), used_at=datetime.now(UTC), used_by=user.id)
     except IntegrityError:
         raise AuthError("This e-mail address is already registered", 409) from None
+
+
+def change_password(session, user: models.User, current_password: str, new_password: str) -> dict:
+    """Check the current password, store the new hash, sign out every other device and
+    return a fresh token pair for this one."""
+    if not security.verify_password(user.password_hash, current_password):
+        raise AuthError("The current password is wrong", 400)
+    if current_password == new_password:
+        raise AuthError("The new password must be different", 400)
+    repos.UserRepository(session, user.company_id).update(user, password_hash=security.hash_password(new_password))
+    repos.RefreshTokenRepository(session, user.company_id).revoke_all_for_user(user.id)
+    return _issue_tokens(session, user)

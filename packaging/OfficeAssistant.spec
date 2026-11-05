@@ -1,10 +1,9 @@
-# PyInstaller build of the Desktop AI Office Assistant (two programs, one folder).
+# PyInstaller build of the Desktop AI Office Assistant (one program, one folder).
 #
 #   pyinstaller packaging/OfficeAssistant.spec --noconfirm --clean
 #
 # Output: dist/OfficeAssistant/
 #   OfficeAssistant.exe        the application (main.py)
-#   OfficeAssistant-Admin.exe  the admin panel (admin.py)
 #   _internal/                 Python, Qt, PyTorch + CUDA, the AI models, icons
 #
 # One-folder (not one-file): PyTorch's CUDA DLLs and ~8 GB of models would have to be
@@ -95,21 +94,15 @@ def newer_vc_runtime(analysis_):
 
 
 app_a = analysis("main.py")
-admin_a = analysis("admin.py")
 newer_vc_runtime(app_a)
-newer_vc_runtime(admin_a)
 
 app_pyz = PYZ(app_a.pure)
-admin_pyz = PYZ(admin_a.pure)
 
 app_exe = EXE(app_pyz, app_a.scripts, [], exclude_binaries=True, name="OfficeAssistant",
               icon=ICON, console=False, upx=False)
-admin_exe = EXE(admin_pyz, admin_a.scripts, [], exclude_binaries=True, name="OfficeAssistant-Admin",
-                icon=ICON, console=False, upx=False)
 
 coll = COLLECT(
     app_exe, app_a.binaries, app_a.datas,
-    admin_exe, admin_a.binaries, admin_a.datas,
     upx=False,
     name="OfficeAssistant",
 )

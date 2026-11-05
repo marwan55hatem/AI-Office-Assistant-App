@@ -14,7 +14,7 @@ from app.core.config import get_settings
 from app.core.deps import CurrentManager, CurrentUser
 from app.db.models import Company, User
 from app.repositories.tenant import CompanyRepository, InviteRepository, RefreshTokenRepository, UserRepository
-from app.schemas.auth import CompanyOut, InviteCreate, InviteOut, UserOut, UserStatusChange
+from app.schemas.auth import CompanyOut, InviteCreate, InviteOut, ProfileUpdate, UserOut, UserStatusChange
 from app.services.auth_service import _join_code
 
 router = APIRouter(tags=["people"])
@@ -24,10 +24,19 @@ NOT_FOUND = HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
 @router.get("/users", response_model=list[UserOut])
 def list_users(principal: CurrentManager,
                status_filter: Literal["pending", "active", "disabled"] | None = Query(None, alias="status"),
-               limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0)):
+               role: Literal["manager", "employee"] | None = None,
+               limit: int = Query(500, ge=1, le=2000), offset: int = Query(0, ge=0)):
     users = UserRepository(principal.session, principal.company_id)
     conditions = [User.status == status_filter] if status_filter else []
-    return users.list(*conditions, order_by=User.created_at, limit=limit, offset=offset)
+    if role:
+        conditions.append(User.role == role)
+    return users.list(*conditions, order_by=User.full_name, limit=limit, offset=offset)
+
+
+@router.patch("/users/me", response_model=UserOut)
+def update_profile(body: ProfileUpdate, principal: CurrentUser):
+    """Change your own display name (the e-mail address is the login and stays fixed)."""
+    return UserRepository(principal.session, principal.company_id).update(principal.user, full_name=body.full_name)
 
 
 @router.get("/users/{user_id}", response_model=UserOut)

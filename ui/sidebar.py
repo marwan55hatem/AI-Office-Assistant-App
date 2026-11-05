@@ -266,6 +266,15 @@ class Sidebar(QFrame):
         if button is not None and not button.isChecked():
             button.setChecked(True)
 
+    def set_item_enabled(self, key, enabled, reason=""):
+        """Grey out one item (e.g. a page that needs the server while offline)."""
+        button = self._buttons.get(key)
+        if button is None:
+            return
+        button.setEnabled(enabled)
+        label = self._labels[key][1].text() if key in self._labels else key
+        button.setToolTip(label if enabled else f"{label} ({reason})" if reason else label)
+
     def set_user(self, full_name):
         """Show a new display name (avatar initials and tooltip follow)."""
         self.full_name = full_name or "User"

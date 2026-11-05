@@ -98,3 +98,12 @@ class InviteOut(BaseModel):
 
 class UserStatusChange(Strict):
     status: Literal["active", "disabled"]
+
+
+class ProfileUpdate(Strict):
+    full_name: Name
+
+
+class PasswordChange(Strict):
+    current_password: Annotated[str, Field(min_length=1, max_length=128)]
+    new_password: Password

@@ -152,3 +152,12 @@ def test_cors_allows_only_the_website_origin(client):
                                                      "Access-Control-Request-Method": "POST"})
     assert allowed.headers.get("access-control-allow-origin") == "http://localhost:3000"
     assert "access-control-allow-origin" not in blocked.headers
+
+
+def test_signed_out_token_is_refused_without_ending_other_sessions(client):
+    register(client)
+    phone = login(client, "boss@acme-corp.com").json()
+    laptop = login(client, "boss@acme-corp.com").json()
+    client.post("/auth/logout", json={"refresh_token": phone["refresh_token"]})
+    assert client.post("/auth/refresh", json={"refresh_token": phone["refresh_token"]}).status_code == 401
+    assert client.post("/auth/refresh", json={"refresh_token": laptop["refresh_token"]}).status_code == 200

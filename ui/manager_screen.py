@@ -516,12 +516,7 @@ class SessionsHistoryPage(_Page):
         self.history_header.setText(
             f"📅   Sessions History — {self.history_range.currentText().lower()}"
         )
-        user_id = self.history_user.currentData()
-        if user_id is not None:
-            try:
-                user_id = int(user_id)
-            except (TypeError, ValueError):
-                user_id = None
+        user_id = self.history_user.currentData()       # a number locally, a UUID string online
 
         try:
             rows = self.db.get_sessions_history(user_id=user_id, days=days)
@@ -1224,7 +1219,7 @@ class ManagerScreen(ShellNavigationMixin, QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
         root.addWidget(self.sidebar)
-        root.addWidget(self.stack, 1)
+        root.addWidget(self._content_with_banner(), 1)
 
         # Kept for callers that read the previous single-screen attributes.
         self.employees = []

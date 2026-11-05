@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 APP_NAME = "Desktop AI Office Assistant"
 APP_VERSION = "1.0.0"
-MIN_PASSWORD_LENGTH = 4
+MIN_PASSWORD_LENGTH = 8
 CONTENT_MAX_WIDTH = 920
 
 
@@ -447,6 +447,10 @@ class SettingsScreen(QWidget):
 
         self.full_name_input.setText(full_name)
         self.username_input.setText(username)
+        # online, the e-mail address is the sign-in and is managed by the company
+        fixed = not getattr(self.db, "can_change_username", True)
+        self.username_input.setReadOnly(fixed)
+        self.username_input.setToolTip("Your sign-in e-mail cannot be changed here" if fixed else "")
         self.identity_name.setText(full_name)
         self.avatar.setText(self._initials(full_name))
         self.role_pill.setText("👔  Manager" if role == "manager" else "🧑  Employee")
@@ -509,23 +513,6 @@ class SettingsScreen(QWidget):
             self._show_status(self.password_status, "Database not available.", False)
             return
 
-        row = self._stored_user()
-        if row is None:
-            self._show_status(self.password_status, "Could not find your account.", False)
-            return
-
-        try:
-            verified = self.db.get_user(row["username"], current, row["role"])
-        except Exception:
-            logger.warning("password check failed", exc_info=True)
-            self._show_status(
-                self.password_status, "Could not read the user database.", False
-            )
-            return
-        if verified is None:
-            self._show_status(self.password_status, "Current password is incorrect.", False)
-            return
-
         if new != confirm:
             self._show_status(self.password_status, "New passwords do not match.", False)
             return
@@ -538,7 +525,8 @@ class SettingsScreen(QWidget):
             return
 
         try:
-            ok, message = self.db.update_user_password(self.user["id"], new)
+            # the current password is checked by the database / server, not here
+            ok, message = self.db.change_password(self.user["id"], current, new)
         except Exception:
             logger.warning("password save failed", exc_info=True)
             self._show_status(

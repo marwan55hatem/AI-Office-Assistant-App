@@ -19,6 +19,8 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
+from database.passwords import hash_password, is_hashed, verify_password
+
 try:
     from database.repositories import REPOSITORIES
 except ImportError:                     # run as a script: ``python database/db_manager.py``
@@ -246,6 +248,13 @@ class DatabaseManager:
         if "source" not in {row["name"] for row in cursor.fetchall()}:
             cursor.execute("ALTER TABLE ai_messages ADD COLUMN source TEXT")
 
+        # Migration: passwords used to be stored as typed; replace each one with a
+        # salted hash (the user signs in with the same password as before).
+        for row in cursor.execute("SELECT id, password FROM users").fetchall():
+            if not is_hashed(row["password"]):
+                cursor.execute("UPDATE users SET password=? WHERE id=?",
+                               (hash_password(row["password"]), row["id"]))
+
         self.conn.commit()
 
     def seed_demo_users(self) -> None:
@@ -262,8 +271,8 @@ class DatabaseManager:
             "INSERT INTO users (username, password, role, full_name, status)"
             " VALUES (?, ?, ?, ?, 'approved')",
             [
-                ("manager", "1234", "manager", "Admin Manager"),
-                ("marwan", "1234", "employee", "Marwan Hatem"),
+                ("manager", hash_password("1234"), "manager", "Admin Manager"),
+                ("marwan", hash_password("1234"), "employee", "Marwan Hatem"),
             ],
         )
         self.conn.commit()
@@ -287,6 +296,13 @@ class DatabaseManager:
         return datetime.now().strftime("%H:%M:%S")
 
     @staticmethod
+    def _public(user):
+        """A user row without the password hash."""
+        if user is not None:
+            user.pop("password", None)
+        return user
+
+    @staticmethod
     def _fetch_all(cursor):
         return [dict(row) for row in cursor.fetchall()]
 
@@ -300,23 +316,55 @@ class DatabaseManager:
     # ------------------------------------------------------------------ #
     def get_user(self, username: str, password: str, role: str) -> Optional[Dict[str, Any]]:
         """Return the matching user as a dict, or ``None`` when login fails."""
-        cursor = self.conn.execute(
-            "SELECT * FROM users WHERE username=? AND password=? AND role=?",
-            (username, password, role),
-        )
-        return self._fetch_one(cursor)
+        user = self._fetch_one(self.conn.execute(
+            "SELECT * FROM users WHERE username=? AND role=?", (username, role)))
+        if user is None or not verify_password(user["password"], password):
+            return None
+        return self._public(user)
+
+    def sign_in(self, identifier, password, remember=True):
+        """``(user, None)`` when the username and password match an approved account,
+        otherwise ``(None, message)``. The role comes from the account."""
+        user = self._fetch_one(self.conn.execute("SELECT * FROM users WHERE username=?", (identifier,)))
+        if user is None or not verify_password(user["password"], password):
+            return None, "Invalid credentials"
+        if user["status"] == "pending":
+            return None, "Your account is waiting for manager approval"
+        if user["status"] == "rejected":
+            return None, "Your signup request was rejected"
+        return self._public(user), None
+
+    def restore_sign_in(self):
+        """The local database never remembers a sign-in."""
+        return None
+
+    def sign_out(self):
+        """Nothing to do locally."""
+
+    def change_password(self, user_id, current_password, new_password):
+        """Check the current password, then store the new one. Returns ``(ok, message)``."""
+        row = self.conn.execute("SELECT password FROM users WHERE id=?", (user_id,)).fetchone()
+        if row is None:
+            return False, "User not found"
+        if not verify_password(row["password"], current_password):
+            return False, "Current password is incorrect"
+        return self.update_user_password(user_id, new_password)
+
+    def join(self, full_name, email, password, company_code=None, invite_token=None):
+        """The local database has one company: joining files a pending sign-up request."""
+        return self.create_signup_request(email, password, full_name)
 
     def get_user_by_id(self, user_id: int) -> Optional[Dict[str, Any]]:
         """One user row (dict) by id, or None."""
         cursor = self.conn.execute("SELECT * FROM users WHERE id=?", (user_id,))
-        return self._fetch_one(cursor)
+        return self._public(self._fetch_one(cursor))
 
     def get_all_employees(self) -> List[Dict[str, Any]]:
         """Every account with role 'employee' (any status), sorted by name."""
         cursor = self.conn.execute(
             "SELECT * FROM users WHERE role='employee' ORDER BY full_name"
         )
-        return self._fetch_all(cursor)
+        return [self._public(user) for user in self._fetch_all(cursor)]
 
     def update_user_profile(self, user_id: int, *, full_name=None, username=None):
         """Update only the provided fields. Returns ``(ok, message)``."""
@@ -365,7 +413,7 @@ class DatabaseManager:
             return False, "Password must be at least 4 characters"
         try:
             cursor = self.conn.execute(
-                "UPDATE users SET password=? WHERE id=?", (new_password, user_id)
+                "UPDATE users SET password=? WHERE id=?", (hash_password(new_password), user_id)
             )
             self.conn.commit()
         except sqlite3.Error as error:
@@ -389,7 +437,7 @@ class DatabaseManager:
             cursor.execute(
                 "INSERT INTO users (username, password, role, full_name, status)"
                 " VALUES (?, ?, 'employee', ?, 'pending')",
-                (username, password, full_name),
+                (username, hash_password(password), full_name),
             )
             self.conn.commit()
             return True, "Signup submitted"
@@ -467,6 +515,18 @@ class DatabaseManager:
                 session_id,
             ),
         )
+        self.conn.commit()
+
+    def update_session_progress(self, session_id, focus_seconds, away_seconds, *,
+                                distraction_seconds=0, screen_productive=0,
+                                screen_distracted=0, screen_idle=0):
+        """Store the running counters of an open session (the end time stays empty)."""
+        self.conn.execute(
+            "UPDATE sessions SET focus_seconds=?, away_seconds=?, distraction_seconds=?,"
+            " screen_productive_seconds=?, screen_distracted_seconds=?, screen_idle_seconds=?"
+            " WHERE id=? AND end_time IS NULL",
+            (int(focus_seconds), int(away_seconds), int(distraction_seconds), int(screen_productive),
+             int(screen_distracted), int(screen_idle), session_id))
         self.conn.commit()
 
     def get_today_sessions(self, user_id: int) -> List[Dict[str, Any]]:
@@ -1218,11 +1278,11 @@ class DatabaseManager:
     #  Admin panel helpers (additive: the application never calls these)
     # ------------------------------------------------------------------ #
     def get_all_users(self) -> List[Dict[str, Any]]:
-        """Every user row (passwords included), ordered by role then username."""
+        """Every user row (without password hashes), ordered by role then username."""
         cursor = self.conn.execute(
             "SELECT * FROM users ORDER BY role DESC, username ASC"
         )
-        return self._fetch_all(cursor)
+        return [self._public(user) for user in self._fetch_all(cursor)]
 
     def update_user(self, user_id, *, username=None, password=None,
                     role=None, status=None, full_name=None):
@@ -1238,7 +1298,7 @@ class DatabaseManager:
         ):
             if value is not None:
                 updates.append(f"{column}=?")
-                params.append(value)
+                params.append(hash_password(value) if column == "password" else value)
         if not updates:
             return 0
         params.append(user_id)
@@ -1264,7 +1324,7 @@ class DatabaseManager:
         """
         cursor = self.conn.execute(
             "INSERT INTO users (username, password, role, full_name, status) VALUES (?, ?, ?, ?, ?)",
-            (username, password, role, full_name, status),
+            (username, hash_password(password), role, full_name, status),
         )
         self.conn.commit()
         return cursor.lastrowid
@@ -1472,7 +1532,7 @@ class DatabaseManager:
     def reset_employee_passwords(self, new_password="1234"):
         """Set the password of every *employee* account; returns rows changed."""
         cursor = self.conn.execute(
-            "UPDATE users SET password=? WHERE role='employee'", (new_password,)
+            "UPDATE users SET password=? WHERE role='employee'", (hash_password(new_password),)
         )
         self.conn.commit()
         return cursor.rowcount

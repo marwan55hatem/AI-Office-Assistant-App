@@ -36,11 +36,11 @@ if app_paths.FROZEN:
     os.environ.setdefault("HF_HUB_OFFLINE", "1")          # the installed app never downloads
     os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
-from PyQt5.QtCore import Qt  # noqa: E402
+from PyQt5.QtCore import Qt, QTimer  # noqa: E402
 from PyQt5.QtGui import QIcon  # noqa: E402
 from PyQt5.QtWidgets import QApplication, QStackedWidget  # noqa: E402
 
-from database.db_manager import DatabaseManager  # noqa: E402
+from cloud.qt_bridge import ConnectionEvents, open_database  # noqa: E402
 from ui import theme  # noqa: E402
 from ui.notifications import TrayNotifier  # noqa: E402
 from ui.login_screen import LoginScreen  # noqa: E402
@@ -51,6 +51,8 @@ from ui.ai_helper_screen import AIHelperScreen  # noqa: E402
 from ui.manager_screen import ManagerScreen  # noqa: E402
 
 # Real mode: logins are checked against data/office_assistant.db.
+logger = logging.getLogger(__name__)
+
 DEMO_MODE = False
 
 WINDOW_SIZE = (1280, 800)
@@ -69,7 +71,14 @@ class App(QStackedWidget):
         self.resize(*WINDOW_SIZE)
         self.setMinimumSize(*MIN_WINDOW_SIZE)
 
-        self.db = db if db is not None else DatabaseManager()
+        self.db = db if db is not None else open_database()
+        self.online = True
+        api = getattr(self.db, "api", None)
+        if api is not None:
+            # connection and sign-in events can come from the sync thread: queue them here
+            self.connection_events = ConnectionEvents(api, self)
+            self.connection_events.connection_changed.connect(self._on_connection_changed)
+            self.connection_events.session_expired.connect(self._on_session_expired)
         self.current_user = dict(PLACEHOLDER_USER)
 
         # Tray icon + deadline / event notifications.  It lives as long as the
@@ -78,10 +87,16 @@ class App(QStackedWidget):
         app = QApplication.instance()
         if app is not None:
             app.aboutToQuit.connect(self.notifier.shutdown)
+            app.aboutToQuit.connect(self._close_database)
 
         self.login_screen = self._build_login_screen()
         self.addWidget(self.login_screen)
         self.setCurrentWidget(self.login_screen)
+
+        # A remembered sign-in (Windows Credential Manager) opens the app directly; it
+        # runs after the window is shown so a slow network never delays the window.
+        if callable(getattr(self.db, "restore_sign_in", None)):
+            QTimer.singleShot(0, self._restore_sign_in)
 
     # ------------------------------------------------------------------ #
     #  Screen factories
@@ -104,6 +119,36 @@ class App(QStackedWidget):
     # ------------------------------------------------------------------ #
     #  Navigation
     # ------------------------------------------------------------------ #
+    def _close_database(self):
+        """On exit: send queued session data, then close the connection."""
+        try:
+            self.db.close()
+        except Exception:
+            logger.warning("Closing the database failed", exc_info=True)
+
+    def _restore_sign_in(self):
+        try:
+            user = self.db.restore_sign_in()
+        except Exception:
+            logger.warning("Restoring the sign-in failed", exc_info=True)
+            return
+        if user is not None and self.currentWidget() is self.login_screen:
+            self.login_screen.logged_in_user = user
+            self._on_login(user["role"])
+
+    def _on_connection_changed(self, online):
+        self.online = online
+        set_online = getattr(self.currentWidget(), "set_online", None)
+        if callable(set_online):
+            set_online(online)
+
+    def _on_session_expired(self):
+        """The server ended the sign-in (password changed elsewhere, account disabled...)."""
+        if self.currentWidget() is self.login_screen:
+            return
+        self._logout(sign_out=False)
+        self.login_screen._show_error("Your sign-in has ended. Please sign in again.")
+
     def _on_login(self, role):
         # LoginScreen authenticated against SQLite and stored the real row in
         # ``logged_in_user``; route with that row so every account (not just the
@@ -127,6 +172,8 @@ class App(QStackedWidget):
             screen = self._build_employee_screen()
 
         self._swap(screen)
+        if not self.online and callable(getattr(screen, "set_online", None)):
+            screen.set_online(False)
         self.notifier.start(self.current_user)
 
     def _open_signup(self):
@@ -159,8 +206,13 @@ class App(QStackedWidget):
     def _back_to_employee(self):
         self._swap(self._build_employee_screen())
 
-    def _logout(self):
+    def _logout(self, sign_out=True):
         self.notifier.stop()
+        if sign_out and callable(getattr(self.db, "sign_out", None)):
+            try:
+                self.db.sign_out()
+            except Exception:
+                logger.warning("Signing out failed", exc_info=True)
         self.current_user = dict(PLACEHOLDER_USER)
         self.login_screen = self._build_login_screen()
         self._swap(self.login_screen)

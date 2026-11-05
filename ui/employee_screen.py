@@ -539,12 +539,7 @@ class SessionPage(QWidget):
         self._stop_worker(screen_thread)
 
         state = self.session_state
-        if (
-            self.db is not None
-            and state is not None
-            and self.session_id
-            and self.session_id > 0
-        ):
+        if self.db is not None and state is not None and self._has_real_session():
             try:
                 self.db.end_session(
                     self.session_id,
@@ -707,6 +702,31 @@ class SessionPage(QWidget):
 
         self.session_state.tick()
         self._update_stats_ui()
+        self._send_progress()
+
+    #: how often (in counted seconds) the running counters are sent to the database
+    PROGRESS_EVERY = 5
+
+    def _has_real_session(self):
+        """True for a session stored in a database (ids are numbers locally, UUID
+        strings online); False without a database (-1) or when creating it failed."""
+        return self.session_id not in (None, -1, 0)
+
+    def _send_progress(self):
+        """Every few seconds, store the running counters so a manager sees live numbers
+        and nothing is lost if the app is closed without stopping the session."""
+        state = self.session_state
+        update = getattr(self.db, "update_session_progress", None)
+        if update is None or not self._has_real_session() or not state.last_tick_counted:
+            return
+        if state.elapsed_seconds % self.PROGRESS_EVERY:
+            return
+        try:
+            update(self.session_id, state.focus_seconds, state.away_seconds,
+                   distraction_seconds=state.distraction_seconds, screen_productive=state.screen_productive,
+                   screen_distracted=state.screen_distracted, screen_idle=state.screen_idle)
+        except Exception:
+            logger.warning("Saving the session progress failed", exc_info=True)
 
 
     def _update_stats_ui(self):
@@ -754,7 +774,7 @@ class SessionPage(QWidget):
         reports a change only when it actually differs from the previous tick --
         the very first tick is never logged.
         """
-        if self.db is not None and self.session_id and self.session_id > 0:
+        if self.db is not None and self._has_real_session():
             try:
                 new_state = state.take_state_change()
                 if new_state is not None:
@@ -811,7 +831,7 @@ class EmployeeScreen(ShellNavigationMixin, QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
         root.addWidget(self.sidebar)
-        root.addWidget(self.stack, 1)
+        root.addWidget(self._content_with_banner(), 1)
 
         # Calendar badge: today's event count, refreshed every 30 s.
         self.badge_timer = QTimer(self)

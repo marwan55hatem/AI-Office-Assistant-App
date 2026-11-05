@@ -1,11 +1,12 @@
-"""Signup screen -- employees request an account, a manager approves it.
+"""Join screen -- employees request an account in their company; a manager approves it.
 
-The screen never creates a usable account directly: it stores a *pending*
-request through :meth:`DatabaseManager.create_signup_request`, and the manager
-dashboard decides whether the account becomes active.
+The employee enters the company code (or pastes the invite link) their manager gave
+them. The screen never creates a usable account directly: ``db.join`` files a
+*pending* request and a manager decides whether the account becomes active.
 """
 
 import logging
+import re
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (
     QFrame,
@@ -31,7 +32,20 @@ from ui.auth_form import (
 
 logger = logging.getLogger(__name__)
 
-MIN_PASSWORD_LENGTH = 4
+MIN_PASSWORD_LENGTH = 8
+#: an invite link ends in ``...invite=<token>`` or ``.../join/<token>``
+_INVITE = re.compile(r"(?:invite=|/join/)([A-Za-z0-9_-]{20,})")
+
+
+def split_code(value):
+    """``(company_code, invite_token)`` from what the employee typed or pasted."""
+    value = value.strip()
+    match = _INVITE.search(value)
+    if match:
+        return None, match.group(1)
+    if len(value) > 16:                       # a bare invite token
+        return None, value
+    return value.upper(), None
 
 
 class SignupScreen(QWidget):
@@ -58,7 +72,7 @@ class SignupScreen(QWidget):
     def _build_card(self):
         card, layout = build_auth_card(self, margins=(48, 24, 48, 28))
         self._add_back_button(layout)
-        add_brand(layout, "users", "Create Account", "Your manager will review your request", wrap_subtitle=True)
+        add_brand(layout, "users", "Join your company", "Your manager will review your request", wrap_subtitle=True)
         layout.addSpacing(theme.SP_4)
         self._add_fields(layout)
         layout.addLayout(self._build_strength_bar())
@@ -85,14 +99,17 @@ class SignupScreen(QWidget):
         layout.addLayout(top_row)
 
     def _add_fields(self, layout):
-        """Full name, username, password and its confirmation."""
+        """Full name, e-mail, company code / invite link, password and its confirmation."""
         self.full_name_input = make_input("🧑  Full name")
-        self.username_input = make_input("🏷   Username")
+        self.username_input = make_input("✉  Work e-mail")
+        self.code_input = make_input("🏢  Company code or invite link")
+        self.code_input.setToolTip("Ask your manager for the 8-character company code or an invite link")
         self.password_input = make_input("🔒  Password", password=True)
         self.password_input.textChanged.connect(self._update_strength)
         self.confirm_input = make_input("🔒  Confirm password", password=True)
         self.confirm_input.returnPressed.connect(self._on_submit)
-        for field in (self.full_name_input, self.username_input, self.password_input, self.confirm_input):
+        for field in (self.full_name_input, self.username_input, self.code_input,
+                      self.password_input, self.confirm_input):
             layout.addWidget(field)
 
     def _build_strength_bar(self):
@@ -157,16 +174,18 @@ class SignupScreen(QWidget):
     def _clear_fields(self):
         self.full_name_input.clear()
         self.username_input.clear()
+        self.code_input.clear()
         self.password_input.clear()
         self.confirm_input.clear()
 
     def _on_submit(self):
         full_name = self.full_name_input.text().strip()
         username = self.username_input.text().strip()
-        password = self.password_input.text().strip()
-        confirm = self.confirm_input.text().strip()
+        code_or_link = self.code_input.text().strip()
+        password = self.password_input.text()
+        confirm = self.confirm_input.text()
 
-        if not full_name or not username or not password or not confirm:
+        if not full_name or not username or not code_or_link or not password or not confirm:
             self._show_error("Please fill in all fields")
             return
         if password != confirm:
@@ -183,7 +202,9 @@ class SignupScreen(QWidget):
             return
 
         try:
-            ok, message = self.db.create_signup_request(username, password, full_name)
+            company_code, invite_token = split_code(code_or_link)
+            ok, message = self.db.join(full_name, username, password,
+                                       company_code=company_code, invite_token=invite_token)
         except Exception:
             # e.g. a locked database: report it instead of crashing the screen.
             logger.warning("could not save the request", exc_info=True)

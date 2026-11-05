@@ -2,6 +2,10 @@
 
 import logging
 
+from PyQt5.QtWidgets import QVBoxLayout, QWidget
+
+from ui.connection_banner import ConnectionBanner
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,6 +22,29 @@ class ShellNavigationMixin:
         refresh = getattr(self.stack.currentWidget(), "refresh", None)
         if callable(refresh):
             refresh()
+
+    #: pages that still work without the server (the session records into the outbox)
+    WORKS_OFFLINE = ("session", "ai_helper", "settings")
+
+    def _content_with_banner(self):
+        """The page stack with the offline banner above it."""
+        self.connection_banner = ConnectionBanner()
+        content = QWidget()
+        column = QVBoxLayout(content)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(0)
+        column.addWidget(self.connection_banner)
+        column.addWidget(self.stack, 1)
+        return content
+
+    def set_online(self, online):
+        """Show or hide the offline banner and grey out the pages that need the server."""
+        banner = getattr(self, "connection_banner", None)
+        if banner is not None:
+            banner.set_online(online)
+        for key in self._page_index:
+            if key not in self.WORKS_OFFLINE:
+                self.sidebar.set_item_enabled(key, online, "needs a connection")
 
     def _refresh_calendar_badge(self):
         """Show how many events today (created or invited) on the Calendar item."""

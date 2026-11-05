@@ -28,3 +28,4 @@ PyMuPDF==1.28.2
 
 # Windows active-window and idle detection
 pywin32==312
+httpx==0.28.1             # talks to the Office Assistant server
