@@ -1,44 +1,45 @@
 """The language model as the chat screen sees it: a small, replaceable service.
 
-The screen needs only five things from the model -- is it loaded, on which device,
-start loading it, start writing an answer, and free it when idle.  Depending on this
-class (and not on ``model_manager`` / ``workers`` directly) means the screen can be
-given any other object with the same methods -- a fake in tests, or another model
-later -- and the heavy ``torch`` import stays out of the screen's module.
+The model now runs online (on the Office Assistant server, which calls Groq); nothing
+is loaded on this computer. The screen still needs the same five things -- is it
+ready, on what, start "loading", start writing an answer, free it when idle -- so a
+fake can stand in for it in tests.
 """
 
-from typing import Dict, List, Optional
+from typing import Optional
 
 
 class ModelService:
-    """Facade over :class:`llm.model_manager.LLMManager` and the Qt workers."""
+    """The online chat model, reached through the signed-in API client of ``db``."""
+
+    def __init__(self, db=None):
+        self.db = db
+
+    @property
+    def api(self):
+        return getattr(self.db, "api", None)
+
+    def available(self) -> bool:
+        """True when questions can be sent: signed in to the server and online."""
+        api = self.api
+        return api is not None and api.signed_in and api.online
 
     def is_loaded(self) -> bool:
-        """True when the model is in memory and can answer at once."""
-        from llm.model_manager import get_manager
-
-        return get_manager().loaded
+        return True                      # nothing to load locally
 
     def device(self) -> Optional[str]:
-        """``"cuda"``, ``"cpu"`` or ``None`` when nothing is loaded."""
-        from llm.model_manager import get_manager
-
-        return get_manager().device
+        return "cloud"
 
     def create_load_worker(self, parent=None):
-        """A not-yet-started ``QThread`` with ``loaded(device)`` / ``failed(message)`` signals."""
-        from llm.workers import LoadWorker
+        from llm.workers import ReadyWorker
 
-        return LoadWorker(parent)
+        return ReadyWorker(parent)
 
-    def create_generate_worker(self, messages: List[Dict[str, str]], parent=None):
-        """A not-yet-started ``QThread`` with ``piece`` / ``done`` / ``failed`` signals and ``stop()``."""
+    def create_generate_worker(self, request, parent=None):
+        """``request`` is ``{"chat_id", "question"}`` (see ``ReplyStream.request``)."""
         from llm.workers import GenerateWorker
 
-        return GenerateWorker(messages, parent)
+        return GenerateWorker(self.api, request, parent)
 
     def unload_if_idle(self, seconds: Optional[float] = None) -> bool:
-        """Free the model's memory if it has been unused for ``seconds`` (default: the config value)."""
-        from llm.model_manager import get_manager
-
-        return get_manager().unload_if_idle(seconds)
+        return False                     # nothing is held in memory

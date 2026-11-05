@@ -37,7 +37,7 @@ datas = [
 ]
 # OFFICE_BUILD_NO_MODELS=1 makes a quick test build without the ~8 GB of models.
 if os.environ.get("OFFICE_BUILD_NO_MODELS") != "1":
-    datas.append((os.path.join(ROOT, "models"), "models"))         # Qwen, BART, MarianMT, YOLO (offline)
+    datas.append((os.path.join(ROOT, "models"), "models"))         # BART, MarianMT, YOLO (offline)
 binaries = []
 hiddenimports = [
     "PyQt5.QtSvg",
@@ -53,7 +53,7 @@ for package in ("ultralytics", "pymupdf"):
     hiddenimports += h
 
 # transformers imports model classes lazily by name -- collect the families the app uses.
-for module in ("transformers.models.auto", "transformers.models.qwen2", "transformers.models.bart",
+for module in ("transformers.models.auto", "transformers.models.bart",
                "transformers.models.marian", "transformers.generation"):
     hiddenimports += collect_submodules(module)
 datas += collect_data_files("transformers", include_py_files=False)

@@ -115,7 +115,8 @@ def test_employee_and_manager_flows(client, connect):
 def test_the_chat_engine_answers_from_the_server(client, connect):
     """The chat's data answers (tasks, team) come from the server through the same methods.
 
-    The intent classifier needs PyTorch, which the backend gets in Phase 3."""
+    The intent classifier runs in the desktop app and needs PyTorch, which the server does not install,
+    so this check runs only where PyTorch is available."""
     pytest.importorskip("torch")
     from assistant.answers import AssistantEngine
 

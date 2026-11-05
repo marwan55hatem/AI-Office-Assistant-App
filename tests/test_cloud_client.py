@@ -309,3 +309,85 @@ def test_closing_stops_the_sync_thread_and_sends_what_is_queued(server, tmp_path
     db.close()
     assert not db.sync.is_alive()
     assert server.sync_batches and server.sync_batches[-1]["sessions"][0]["id"] == session_id
+
+
+# ---------------------------------------------------------------- the online chat model (Phase 3)
+class ChatServer(FakeServer):
+    """Adds the streamed /ai/chat answer."""
+
+    def __init__(self, events):
+        super().__init__()
+        self.events = events
+        self.asked = []
+
+    def __call__(self, request):
+        if request.url.path == "/ai/chat":
+            if request.headers.get("Authorization") != f"Bearer {self.access}":
+                return httpx.Response(401, json={"detail": "Not signed in"})
+            self.asked.append(json.loads(request.content))
+            if isinstance(self.events, httpx.Response):
+                return self.events
+            body = "".join("data: " + json.dumps(e) + "\n\n" for e in self.events)
+            return httpx.Response(200, text=body, headers={"content-type": "text/event-stream"})
+        return super().__call__(request)
+
+
+def _run_worker(qt_app, api, request):
+    from llm.workers import GenerateWorker
+
+    worker = GenerateWorker(api, request)
+    pieces, outcome = [], {}
+    worker.piece.connect(pieces.append)
+    worker.done.connect(lambda stopped: outcome.setdefault("done", stopped))
+    worker.failed.connect(lambda message: outcome.setdefault("failed", message))
+    worker.run()                       # in this thread: the signals are delivered directly
+    return worker, "".join(pieces), outcome
+
+
+def test_worker_streams_the_servers_answer_and_sources(qt_app):
+    server = ChatServer([{"type": "delta", "text": "Max "}, {"type": "delta", "text": "pooling."},
+                         {"type": "done", "sources": ["cnn-notes.md"]}])
+    api = make_api(server)
+    api.login("w@corp.com", "right password")
+    worker, text, outcome = _run_worker(qt_app, api, {"chat_id": "c-1", "question": "What is pooling?"})
+    assert text == "Max pooling." and outcome == {"done": False} and worker.sources == ["cnn-notes.md"]
+    assert server.asked == [{"chat_id": "c-1", "question": "What is pooling?"}]   # only the question
+
+
+def test_worker_reports_server_errors_and_the_daily_limit(qt_app):
+    busy = ChatServer([{"type": "error", "message": "The AI service is busy.", "busy": True}])
+    api = make_api(busy)
+    api.login("w@corp.com", "right password")
+    assert _run_worker(qt_app, api, {"chat_id": "c", "question": "q"})[2] == {"failed": "The AI service is busy."}
+    limit = ChatServer(httpx.Response(429, json={"detail": "Your company has used today's AI allowance."}))
+    api = make_api(limit)
+    api.login("w@corp.com", "right password")
+    assert "allowance" in _run_worker(qt_app, api, {"chat_id": "c", "question": "q"})[2]["failed"]
+
+
+def test_worker_offline_is_reported(qt_app, server):
+    api = make_api(server)
+    api.login("w@corp.com", "right password")
+    server.down = True
+    assert _run_worker(qt_app, api, {"chat_id": "c", "question": "q"})[2] == {"failed": "No connection to the server."}
+
+
+def test_general_questions_go_to_the_server_with_the_chat_id(db, marwan):
+    from chat.chat_client import ChatClient
+
+    client = ChatClient(db, marwan["id"])
+    client.backend._model_present = lambda: True
+    chat = client.new_chat()
+    client.send_message(chat.id, "How do I build a CNN in PyTorch?")
+    reply = client.stream_reply(chat.id, delay=0)
+    assert reply.kind == "llm"
+    assert reply.request == {"chat_id": chat.id, "question": "How do I build a CNN in PyTorch?"}
+
+
+def test_settings_say_what_is_sent_to_the_model(qt_app, db, marwan):
+    from ui.settings_screen import SettingsScreen
+
+    screen = SettingsScreen(user=marwan, db=db)
+    text = screen.ai_privacy_label.text()
+    assert "Never sent" in text and "tasks" in text and "Groq" in text and "30 days" in text
+    screen.deleteLater()

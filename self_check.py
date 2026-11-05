@@ -36,24 +36,15 @@ def _detect():
     return f"person={person} phone={phone}"
 
 
-def _chat():
-    from llm.model_manager import get_manager
-    manager = get_manager()
-    device = manager.load()
-    reply = "".join(manager.stream([{"role": "user", "content": "Say hello in three words."}], max_new_tokens=16))
-    return f"{device}: {reply.strip()}"
-
-
 def _database():
     from database.db_manager import DatabaseManager, DB_PATH
     DatabaseManager()
     return DB_PATH
 
 
-# The chat model goes first: it needs MIN_FREE_VRAM_GB free and would fall back to the CPU
-# if BART/MarianMT were already on the GPU, hiding a broken CUDA path.
-CHECKS = [("database", _database), ("chat model", _chat), ("detector", _detect),
-          ("summarizer", _summarize), ("translator", _translate)]
+# The chat model runs online (Phase 3), so only the local models are checked here.
+CHECKS = [("database", _database), ("detector", _detect), ("summarizer", _summarize),
+          ("translator", _translate)]
 
 
 def run() -> int:

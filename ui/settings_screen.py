@@ -291,14 +291,23 @@ class SettingsScreen(QWidget):
         return card
 
     # ------------------------------ AI assistant ----------------------- #
+    #: shown in the AI card so everyone can see what leaves this computer
+    AI_SENT = ("your question", "the AI's own earlier answers in the same chat",
+               "matching passages from your company's documents that you are allowed to read")
+    AI_NEVER_SENT = ("your tasks, deadlines and calendar", "work sessions, timers and team numbers",
+                     "camera images, screenshots and window titles", "other people's chats")
+    AI_PROVIDER_NOTE = (
+        "General questions are answered by the openai/gpt-oss-120b model at Groq, through your "
+        "company's server. Groq does not keep these requests by default, but may keep logs for a "
+        "limited time (up to 30 days) to investigate problems or abuse, under its own terms.")
+
     def _build_ai_card(self):
         card, layout = make_card(
             "🤖  AI assistant",
             "The AI Chat answers questions about your tasks, calendar and team from your own data. "
-            "For general questions (for example “how do I build a CNN?”) it can also use a small "
-            "AI model that runs on this computer. Nothing is sent over the internet.")
+            "General questions (for example “how do I build a CNN?”) can be answered by an online AI model.")
 
-        self.ai_model_check = QCheckBox("Use the AI model for general questions")
+        self.ai_model_check = QCheckBox("Use the online AI model for general questions")
         self.ai_model_check.setCursor(Qt.PointingHandCursor)
         self.ai_model_check.toggled.connect(self._on_ai_model_toggled)
         layout.addWidget(self.ai_model_check)
@@ -308,17 +317,13 @@ class SettingsScreen(QWidget):
         self.ai_status_label.setWordWrap(True)
         layout.addWidget(self.ai_status_label)
 
-        row = QHBoxLayout()
-        self.ai_unload_button = QPushButton("Free the memory now")
-        self.ai_unload_button.setObjectName("GhostButton")
-        self.ai_unload_button.setCursor(Qt.PointingHandCursor)
-        self.ai_unload_button.setStyleSheet("min-height: 0px;")
-        self.ai_unload_button.setFixedHeight(44)
-        self.ai_unload_button.setToolTip("Unload the AI model from the graphics card (it loads again when needed).")
-        self.ai_unload_button.clicked.connect(self._on_ai_unload)
-        row.addWidget(self.ai_unload_button)
-        row.addStretch(1)
-        layout.addLayout(row)
+        self.ai_privacy_label = QLabel(
+            "<b>Sent to the model:</b> " + "; ".join(self.AI_SENT) + ".<br>"
+            "<b>Never sent:</b> " + "; ".join(self.AI_NEVER_SENT) + ".<br>" + self.AI_PROVIDER_NOTE)
+        self.ai_privacy_label.setObjectName("MutedLabel")
+        self.ai_privacy_label.setWordWrap(True)
+        self.ai_privacy_label.setTextFormat(Qt.RichText)
+        layout.addWidget(self.ai_privacy_label)
         self._refresh_ai_card()
         return card
 
@@ -328,30 +333,17 @@ class SettingsScreen(QWidget):
         self.ai_model_check.setChecked(preferences.use_ai_model() and not forced)
         self.ai_model_check.blockSignals(False)
         self.ai_model_check.setEnabled(not forced)
-        state, text = model_status.snapshot(preferences.model_enabled())
+        from llm.service import ModelService
+
+        _state, text = model_status.snapshot(preferences.model_enabled(), service=ModelService(self.db)
+                                             if getattr(self.db, "api", None) is not None else None)
         if forced:
             text += "  (switched off from outside: OFFICE_LLM=0)"
         self.ai_status_label.setText(text)
-        self.ai_unload_button.setEnabled(state in (model_status.READY, model_status.SLOW))
 
     def _on_ai_model_toggled(self, checked):
         preferences.set_use_ai_model(checked)
-        if not checked:
-            self._unload_model()                # give the graphics memory back at once
         self._refresh_ai_card()
-
-    def _on_ai_unload(self):
-        self._unload_model()
-        self._refresh_ai_card()
-
-    @staticmethod
-    def _unload_model():
-        """Unload the model if the app has one and nothing is being written right now."""
-        import sys
-
-        module = sys.modules.get("llm.model_manager")
-        if module is not None:
-            module.get_manager().unload_if_idle(seconds=0)
 
     def _swatch(self, colour, caption):
         holder = QWidget()

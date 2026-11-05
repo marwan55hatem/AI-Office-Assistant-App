@@ -163,7 +163,7 @@ class AIChatScreen(QWidget):
         if client is None and db is not None and self.user.get("id"):
             client = ChatClient(db, self.user["id"])
         self.client = client
-        self.models = model_service if model_service is not None else ModelService()
+        self.models = model_service if model_service is not None else ModelService(db)
 
         self.current_chat_id = None
         self._first_open_done = False
@@ -593,7 +593,8 @@ class AIChatScreen(QWidget):
         self._run_generation(self._reply)
 
     def _run_generation(self, reply):
-        worker = self.models.create_generate_worker(reply.messages, self)
+        worker = self.models.create_generate_worker(
+            reply.request if reply.request is not None else reply.messages, self)
         worker.piece.connect(lambda text, w=worker: self._on_llm_piece(w, text))
         worker.done.connect(lambda stopped, w=worker: self._on_llm_done(w, stopped))
         worker.failed.connect(lambda message, w=worker: self._on_llm_failed(w, message))
@@ -615,6 +616,9 @@ class AIChatScreen(QWidget):
         if worker is not self._worker or not self._generating:
             return
         self._worker = None
+        server_sources = getattr(worker, "sources", None)
+        if server_sources:
+            self._reply.sources = list(server_sources)     # the documents the server really used
         self._finish(stopped=False)
 
     def _on_llm_failed(self, worker, message):
@@ -624,7 +628,9 @@ class AIChatScreen(QWidget):
         self._worker = None
         self._think_timer.stop()
         self._bubble.set_thinking(False)
-        self._bubble.set_text(self._reply.fallback_text)
+        fallback = self._reply.fallback_text
+        note = "⚠ " + message if message else ""      # say why (offline, daily limit...)
+        self._bubble.set_text(fallback + ("\n\n" + note if fallback and note else note))
         self._reply.source = "engine"
         self._reply.sources = []                    # the fallback text already names its sources
         self._finish(stopped=False)
@@ -637,7 +643,8 @@ class AIChatScreen(QWidget):
 
     def _update_model_badge(self):
         """The header badge: is the AI model off / not installed / loading / ready / on CPU?"""
-        state, text = model_status.snapshot(preferences.model_enabled(), self._loading)
+        state, text = model_status.snapshot(preferences.model_enabled(), self._loading,
+                                            self.models if hasattr(self.models, "available") else None)
         if self.model_badge.text() != text:
             self.model_badge.setText(text)
         if self.model_badge.property("state") != state:

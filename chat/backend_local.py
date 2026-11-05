@@ -25,14 +25,15 @@ class ReplyStream:
     between chunks (0 in tests).
 
     ``kind`` is ``"text"`` (the engine answered from the database; ``full_text`` is
-    ready) or ``"llm"`` (the language model must write it: ``messages`` is its
-    prompt, to be run by ``llm.workers.GenerateWorker``; ``fallback_text`` is what
-    to show if the model cannot answer).  ``source`` is what gets stored with the
-    reply: ``"engine"`` or ``"llm"``.
+    ready) or ``"llm"`` (the online model must write it: ``request`` --
+    ``{"chat_id", "question"}`` -- is sent to the server, which builds the prompt
+    itself; ``messages`` is the same prompt built here, for tests and display;
+    ``fallback_text`` is what to show if the model cannot answer).  ``source`` is
+    what gets stored with the reply: ``"engine"`` or ``"llm"``.
     """
 
     def __init__(self, text, intent="", confidence=0.0, delay=0.02,
-                 kind="text", messages=None, fallback_text="", sources=None):
+                 kind="text", messages=None, fallback_text="", sources=None, request=None):
         self.full_text = text
         self.intent = intent
         self.confidence = confidence
@@ -40,6 +41,7 @@ class ReplyStream:
         self.kind = kind
         self.source = "llm" if kind == "llm" else "engine"
         self.messages = messages or []
+        self.request = request
         self.fallback_text = fallback_text
         self.sources = list(sources or [])      # documents the answer is based on (named after it)
 
@@ -160,7 +162,8 @@ class LocalBackend(ChatBackend):
             messages = build_messages(self._llm_pairs(chat_id), question, hits)
             return ReplyStream("", "documents" if hits else "general", reply.confidence, delay,
                                kind="llm", messages=messages, sources=sources_of(hits),
-                               fallback_text=format_passages(hits) if hits else reply.text)
+                               fallback_text=format_passages(hits) if hits else reply.text,
+                               request={"chat_id": chat_id, "question": question})
         if wants and hits:
             from knowledge.store import format_passages
 
@@ -218,14 +221,12 @@ class LocalBackend(ChatBackend):
         return bool(previous and previous["role"] == "assistant" and previous.get("source") == "llm")
 
     def llm_ready(self) -> bool:
-        """True when general questions may go to the language model (enabled + files present)."""
+        """True when general questions may go to the online model (enabled + signed in + online)."""
         return self.llm_enabled and self._model_present()
 
-    @staticmethod
-    def _model_present():
-        from llm.model_manager import get_manager
-
-        return get_manager().available()
+    def _model_present(self):
+        api = getattr(self.db, "api", None)
+        return api is not None and api.signed_in and api.online
 
     def _llm_pairs(self, chat_id):
         """Earlier (question, answer) pairs of this chat that the model itself answered."""

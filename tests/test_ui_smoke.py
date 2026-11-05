@@ -162,7 +162,9 @@ def test_the_chat_screen_runs_on_an_injected_model_service(app, db, marwan, monk
     screen.input.setPlainText("How do I build a CNN model?")
     screen._on_send()
     assert wait_until(app, lambda: not screen._generating)
-    assert len(service.workers) == 1 and service.workers[0].messages[-1]["content"] == "How do I build a CNN model?"
+    # only the chat and the question go to the (online) model; the server builds the prompt
+    assert len(service.workers) == 1
+    assert service.workers[0].messages == {"chat_id": screen.current_chat_id, "question": "How do I build a CNN model?"}
     last = screen.findChildren(ChatBubble)[-1]
     assert last.text() == "Hello **world**"                        # raw text is what is stored
     labels = [l.text() for l in last.findChildren(QLabel) if l.objectName() == "ChatText"]

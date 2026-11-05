@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.db.session import check_app_role
-from app.routers import auth, calendar, content, people, sessions, stats, tasks
+from app.routers import ai, auth, calendar, content, people, sessions, stats, tasks
 
 logger = logging.getLogger("office.api")
 
@@ -38,7 +38,7 @@ def create_app() -> FastAPI:
                        allow_headers=["Authorization", "Content-Type"])
     app.include_router(auth.router)
     app.include_router(people.router)
-    for module in (sessions, stats, tasks, calendar, content):
+    for module in (sessions, stats, tasks, calendar, content, ai):
         app.include_router(module.router)
 
     @app.get("/health", tags=["health"])

@@ -5,7 +5,6 @@
 
 After this the application, and the installer built from it, run with no internet:
 
-* ``models/qwen2.5-1.5b-instruct``     the chat model (Apache-2.0)
 * ``models/hf/bart-large-cnn``         the summariser (MIT)
 * ``models/hf/opus-mt-<src>-<tgt>``    the 12 MarianMT translation pairs (CC-BY-4.0)
 * ``models/yolo12n.pt``                person / phone detection (AGPL-3.0)
@@ -28,8 +27,6 @@ import app_paths  # noqa: E402
 from assistant.summarizer import BART_MODEL_NAME  # noqa: E402
 from assistant.translator import DIRECT_MODELS  # noqa: E402
 
-QWEN_REPO = "Qwen/Qwen2.5-1.5B-Instruct"
-QWEN_DIR = os.path.join(app_paths.MODELS_DIR, "qwen2.5-1.5b-instruct")
 YOLO_FILE = os.path.join(app_paths.MODELS_DIR, "yolo12n.pt")
 YOLO_URL_NAME = "yolo12n.pt"
 TOKENIZER_FILES = ["*.json", "*.txt", "*.model", "*.spm", "vocab*", "merges.txt", "LICENSE*", "README.md"]
@@ -46,7 +43,7 @@ def complete(path):
 
 def hf_targets():
     """``[(repo_id, local_dir)]`` for every Hugging Face model the app loads."""
-    targets = [(QWEN_REPO, QWEN_DIR)]
+    targets = []
     for repo in [BART_MODEL_NAME] + sorted(set(DIRECT_MODELS.values())):
         targets.append((repo, os.path.join(app_paths.HF_MODELS_DIR, repo.split("/")[-1])))
     return targets

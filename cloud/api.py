@@ -7,6 +7,7 @@
   the window can show its banner; the next successful call marks it online again.
 * Passwords are sent only to the sign-in endpoints and are never stored or logged.
 """
+import json
 import logging
 import threading
 from typing import Callable
@@ -111,6 +112,39 @@ class ApiClient:
         if response.status_code == 204 or not response.content:
             return None
         return response.json()
+
+    def stream_events(self, path: str, body: dict, should_stop=lambda: False):
+        """POST and yield the server-sent events of a streamed answer as dicts.
+
+        Stops reading (and closes the connection, which also stops the server) as soon
+        as ``should_stop()`` is true.
+        """
+        if not self.signed_in:
+            raise SessionExpired("Not signed in")
+        for attempt in (1, 2):
+            headers = {"Authorization": f"Bearer {self._access_token}", "Accept": "text/event-stream"}
+            try:
+                with self.http.stream("POST", path, json=body, headers=headers,
+                                      timeout=httpx.Timeout(120.0, connect=4.0)) as response:
+                    self._set_online(True)
+                    if response.status_code == 401 and attempt == 1:
+                        response.read()
+                        self._refresh()
+                        continue
+                    if response.status_code == 401:
+                        self._expire()
+                    if response.status_code >= 400:
+                        response.read()
+                        raise ApiError(response.status_code, _message(response))
+                    for line in response.iter_lines():
+                        if should_stop():
+                            return
+                        if line.startswith("data: "):
+                            yield json.loads(line[6:])
+                    return
+            except httpx.TransportError:
+                self._set_online(False)
+                raise Offline("The server could not be reached") from None
 
     def get(self, path, **params):
         return self.request("GET", path, params={k: v for k, v in params.items() if v is not None})

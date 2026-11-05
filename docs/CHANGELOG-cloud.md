@@ -82,3 +82,54 @@ the sync thread's stop flag hid a method of Python's `Thread`, so closing the ap
 **Not done in this phase**: the user guide, README and install notes still describe the admin panel
 and the role toggle; they are updated in Phase 9 as planned. The webcam session was exercised by tests
 and the page's tick code, not by a live camera run.
+
+## Phase 3: the chat model runs online (Groq)
+
+**Backend**
+- `POST /ai/chat` streams an answer as server-sent events (`delta`, then `done` with the sources, or
+  `error`). The app sends only `{chat_id, question}`; the **server builds the prompt**: the fixed
+  instruction, the model's own earlier answers in that chat (never engine answers that contain data),
+  and BM25 passages from the company's documents the user may read (managers-only documents are left
+  out *before* searching for employees). The model never sees tasks, calendar, sessions or team data.
+- `GET /ai/status`: whether the model is set up, today's usage and budget, what is and is not sent.
+- Provider: Groq's OpenAI-compatible API, model `openai/gpt-oss-120b` (config `GROQ_MODEL`), key only in
+  the server environment (`GROQ_API_KEY`). Streaming; reasoning text switched off; rate limits and
+  server errors retried with backoff honouring `retry-after` (3 attempts) before the first token; if
+  the provider refuses an optional field the request is retried without it. Only status codes are
+  logged, never prompts or answers. Without a key the endpoint answers 503 and the app falls back.
+- **Budget**: tokens per company per UTC day (`AI_DAILY_TOKEN_BUDGET`, default 100,000) recorded in
+  `ai_usage`; when used up, 429 with "Your company has used today's AI allowance…". Usage is recorded
+  even when the user presses Stop. Per-user limit: 10 questions per minute.
+- **Instruction-injection guard** (new — the brief said "keep" it, but none existed): document passages
+  go inside `<<<DOCUMENT … DOCUMENT>>>` fences that the system instruction says are data, never orders;
+  chat-template tokens are removed, fence markers inside a document are defused, role lines such as
+  `system:` are quoted, and passages that look like instructions are labelled for the model.
+- The database work of a chat request finishes before streaming starts, so no transaction stays open
+  while the model writes.
+- `AI_FAKE_MODEL=1` (development only, ignored in production) answers with a fixed text, for testing
+  without a key.
+
+**Desktop app**
+- The intent engine still runs in the app and decides routing exactly as before (data questions are
+  answered from the database through `RemoteDatabase`); general and document questions are streamed
+  from `/ai/chat`. Stop closes the connection, which also stops the server. The sources shown under an
+  answer are the ones the server really used.
+- When the model cannot answer (offline, busy, daily allowance), the chat shows the engine's own answer
+  or the matching passages plus a short note saying why.
+- Header badge: *AI model: online / offline — needs a connection / off*.
+- Settings → AI assistant: the on/off switch, the list of what is sent and what is never sent, and the
+  note that Groq may keep request logs for up to 30 days for troubleshooting or abuse checks under its
+  terms (Groq keeps no inference data by default; Zero Data Retention can be enabled in Groq's console).
+- **Removed** the local Qwen2.5-1.5B model: its loader (`llm/model_manager.py`), config, self-test, the
+  "free the memory" button, the download entry in `tools/fetch_models.py`, the `qwen2` build hook, the
+  self-check step, and the 2.9 GB model folder. Models bundled with the app: 7.9 GB → 5.0 GB.
+
+**Tests**: backend 102 passed (1 skipped as before), including 17 new AI tests (stream, prompt contents,
+history rules, refusals, budget, rate limit, injection fence, Groq parsing/retries). Desktop 182 passed
+(5 new: streaming worker, errors and limit, offline, routing request, Settings notice; one chat-screen test
+now checks that only the chat id and question are sent). Live end-to-end run of the real chat screen
+against a running server with the stand-in model: 7/7.
+
+**Still open**: the live smoke test against Groq with a real key (needs the key, see the report); the
+new installer and its measured size (Phase 9 rebuild); `THIRD_PARTY_NOTICES.md` and the docs still list
+Qwen (Phase 9).

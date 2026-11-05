@@ -5,7 +5,7 @@ see .env.example for the names.
 """
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,6 +31,21 @@ class Settings(BaseSettings):
 
     login_attempts_per_minute: int = 5
     login_attempts_per_ip_per_minute: int = 30
+
+    # -- the online chat model (Groq). The key lives only in the server's environment.
+    groq_api_key: SecretStr | None = None
+    groq_model: str = "openai/gpt-oss-120b"
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    ai_reasoning_effort: str | None = "low"
+    ai_max_output_tokens: int = 1500
+    #: tokens (prompt + answer) one company may use per UTC day
+    ai_daily_token_budget: int = 100_000
+    ai_requests_per_user_per_minute: int = 10
+    ai_history_pairs: int = 6
+    #: how long the provider may keep request logs (shown in the app's Settings)
+    ai_provider_log_days: int = 30
+    #: development only: answer with a fixed text instead of calling Groq (ignored in production)
+    ai_fake_model: bool = False
 
     #: Development only: allow an app role that bypasses RLS (never in production).
     allow_rls_bypass: bool = False
