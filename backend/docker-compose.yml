@@ -1,0 +1,22 @@
+# Local PostgreSQL for development and the test suite (not used in production).
+#   docker compose up -d db
+# The owner account runs migrations; the app connects as office_app (created by
+# scripts/create_app_role.sql), which is subject to Row-Level Security.
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: office_owner
+      POSTGRES_PASSWORD: dev-owner-password
+      POSTGRES_DB: office
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U office_owner -d office"]
+      interval: 2s
+      retries: 20
+    volumes:
+      - office-db:/var/lib/postgresql/data
+
+volumes:
+  office-db:

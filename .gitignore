@@ -23,3 +23,8 @@ models/
 
 # Scratch screenshots of test runs
 screenshots_redesign/*.tmp.png
+
+# Secrets and local settings (never commit)
+.env
+.env.*
+!.env.example
