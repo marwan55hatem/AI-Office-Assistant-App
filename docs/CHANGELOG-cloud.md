@@ -130,6 +130,13 @@ history rules, refusals, budget, rate limit, injection fence, Groq parsing/retri
 now checks that only the chat id and question are sent). Live end-to-end run of the real chat screen
 against a running server with the stand-in model: 7/7.
 
-**Still open**: the live smoke test against Groq with a real key (needs the key, see the report); the
-new installer and its measured size (Phase 9 rebuild); `THIRD_PARTY_NOTICES.md` and the docs still list
+**Live smoke test against Groq (2026-11-06, real key, `openai/gpt-oss-120b`): passed.** Provider call:
+first token after 0.6 s, correct answer, real token counts. End to end (real chat screen -> real server ->
+real Groq), 8/8: document question answered correctly with its source (48 hours), a managers-only
+document's secret was not revealed to an employee, a general question answered, a data question answered
+from the database, and real token usage recorded (3 requests, 1,064 tokens in, 223 out). The key appeared
+in no log. Observation: the model writes citations like 【policy.md】 in its own style next to the
+app's "Sources:" line (cosmetic).
+
+**Still open**: the new installer and its measured size (Phase 9 rebuild); `THIRD_PARTY_NOTICES.md` and the docs still list
 Qwen (Phase 9).
