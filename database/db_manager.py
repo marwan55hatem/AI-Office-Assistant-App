@@ -493,7 +493,7 @@ class DatabaseManager:
 
     def end_session(self, session_id, focus_seconds, away_seconds, *,
                     distraction_seconds=0,
-                    screen_productive=0, screen_distracted=0, screen_idle=0):
+                    screen_productive=0, screen_distracted=0, screen_idle=0, apps=None):
         """Close a session and store its final counters (camera + screen).
 
         ``distraction_seconds`` is the tracked distraction *time*; the legacy
@@ -519,7 +519,7 @@ class DatabaseManager:
 
     def update_session_progress(self, session_id, focus_seconds, away_seconds, *,
                                 distraction_seconds=0, screen_productive=0,
-                                screen_distracted=0, screen_idle=0):
+                                screen_distracted=0, screen_idle=0, apps=None):
         """Store the running counters of an open session (the end time stays empty)."""
         self.conn.execute(
             "UPDATE sessions SET focus_seconds=?, away_seconds=?, distraction_seconds=?,"

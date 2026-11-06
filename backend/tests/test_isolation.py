@@ -7,7 +7,7 @@ Three independent checks:
 3. PostgreSQL Row-Level Security alone (raw SQL as the app role, no repository).
 """
 import uuid
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -27,12 +27,14 @@ def seed_every_table(owner_engine, company_id, manager_id, employee_id) -> dict:
     ids = {"session": uuid.uuid4(), "task": uuid.uuid4(), "calendar": uuid.uuid4(), "document": uuid.uuid4(),
            "meeting": uuid.uuid4(), "invite": uuid.uuid4(), "refresh": uuid.uuid4(), "chat": uuid.uuid4(),
            "manager_chat": uuid.uuid4()}
-    p = {"c": company_id, "m": manager_id, "e": employee_id, **ids}
+    p = {"c": company_id, "m": manager_id, "e": employee_id, "app": f"App of {company_id}", **ids}
     statements = [
         "INSERT INTO sessions (id, company_id, user_id, local_date, started_at, last_seen_at, focus_seconds) "
         "VALUES (:session, :c, :e, current_date, now(), now(), 600)",
         "INSERT INTO events (company_id, client_event_id, session_id, user_id, event_type, occurred_at, app_name) "
         "VALUES (:c, gen_random_uuid(), :session, :e, 'focus', now(), 'Code')",
+        "INSERT INTO session_apps (company_id, session_id, user_id, app_name, category, seconds) "
+        "VALUES (:c, :session, :e, :app, 'neutral', 500)",
         "INSERT INTO ai_chats (id, company_id, user_id, title) VALUES (:chat, :c, :e, 'secret chat')",
         "INSERT INTO ai_chats (id, company_id, user_id, title) VALUES (:manager_chat, :c, :m, 'secret manager chat')",
         "INSERT INTO ai_messages (company_id, chat_id, role, content) VALUES (:c, :chat, 'user', 'secret question')",
@@ -79,7 +81,7 @@ def two_companies(client, owner_engine):
 def _secrets_of(b) -> list[str]:
     return [str(b["company_id"]), str(b["manager_id"]), str(b["employee_id"]), str(b["pending_id"]),
             b["join_code"], "@b-corp.com", "Company B", str(b["invite"]), str(b["session"]), str(b["task"]),
-            str(b["calendar"]), str(b["document"]), str(b["chat"]), "Worker B", "Boss B"]
+            str(b["calendar"]), str(b["document"]), str(b["chat"]), "Worker B", "Boss B", f"App of {b['company_id']}"]
 
 
 # ---------------------------------------------------------------- 1. API
@@ -88,6 +90,8 @@ PARAM_TARGETS = {
     "user_id": ["employee_id", "pending_id", "manager_id"], "invite_id": ["invite"], "session_id": ["session"],
     "task_id": ["task"], "event_id": ["calendar"], "chat_id": ["chat", "manager_chat"], "doc_id": ["document"],
 }
+#: query parameters a route needs before it can even look an id up
+REQUIRED_QUERY = {"/reports/employee/{user_id}": {"start": "2000-01-01", "end": "2000-01-31"}}
 #: a valid body for each write, so the request reaches the lookup (and is not just rejected as invalid)
 BODIES = {
     ("PATCH", "/users/{user_id}/status"): {"status": "disabled"},
@@ -126,7 +130,8 @@ def test_every_route_with_an_id_hides_other_companies(client, two_companies):
             url = path.replace("{" + params[0] + "}", str(b[target]))
             body = BODIES.get((method, path))
             for who in ("manager", "employee"):
-                response = client.request(method, url, json=body, headers=auth(a[who]))
+                response = client.request(method, url, json=body, params=REQUIRED_QUERY.get(path),
+                                          headers=auth(a[who]))
                 assert response.status_code in (403, 404), f"{who} of A got {response.status_code} on {method} {url}"
                 checked += 1
     assert checked >= 40
@@ -143,6 +148,8 @@ WIDE_QUERY = {
     "/documents": {"with_content": "true"},
     "/events/recent": {"limit": "200"},
     "/calendar": {"start": "2000-01-01", "end": "2100-01-01"},
+    "/reports/overview": {"start": str(date.today() - timedelta(days=300)), "end": str(date.today()), "limit": "200"},
+    "/reports/trends": {"start": str(date.today() - timedelta(days=300)), "end": str(date.today())},
 }
 
 

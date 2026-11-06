@@ -35,6 +35,7 @@ from PyQt5.QtWidgets import (
 )
 
 from ui import theme
+from ui.reports_screen import ReportsScreen
 from assistant.formatting import deadline_state, format_deadline
 from ui.calendar_screen import CalendarScreen, style_calendar_widget
 from ui.shell import ShellNavigationMixin
@@ -58,14 +59,6 @@ PENDING_HEADERS = ["FULL NAME", "USERNAME", "REQUESTED", "ACTIONS"]
 HISTORY_HEADERS = ["DATE", "USER", "START", "END", "FOCUS", "DISTRACTED", "AWAY", ""]
 
 TASK_HEADERS = ["EMPLOYEE", "TASK", "PRIORITY", "DEADLINE", "STATUS"]
-
-WEEKLY_HEADERS = [
-    "EMPLOYEE",
-    "TOTAL FOCUS",
-    "TOTAL DISTRACTED",
-    "TOTAL AWAY",
-    "SESSIONS",
-]
 
 HISTORY_RANGES = [("Today", 1), ("Last 7 days", 7), ("Last 30 days", 30),
                   ("All time", 3650)]
@@ -1031,133 +1024,6 @@ class TasksPage(_Page):
 
 
 
-class ReportsPage(_Page):
-    """Weekly report card (the table itself opens in a dialog)."""
-
-    def __init__(self, user=None, db=None, parent=None):
-        super().__init__(user=user, db=db, parent=parent)
-
-        root = QVBoxLayout(self)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(0)
-
-        content = QWidget()
-        content.setObjectName("ScrollContent")
-        body = QVBoxLayout(content)
-        body.setContentsMargins(theme.SP_6, theme.SP_6, theme.SP_6, theme.SP_6)
-        body.setSpacing(theme.SP_5)
-        body.addWidget(self._build_reports_card())
-        body.addStretch(1)
-        root.addWidget(self._page_scroll(content), 1)
-
-    def _build_reports_card(self):
-        card = QFrame()
-        card.setObjectName("Card")
-        theme.apply_card_shadow(card)
-
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(theme.SP_5, theme.SP_5, theme.SP_5, theme.SP_5)
-        layout.setSpacing(theme.SP_3)
-
-        title = QLabel("📊   Weekly Reports")
-        title.setObjectName("H3")
-        layout.addWidget(title)
-
-        description = QLabel(
-            "Aggregated activity of the last 7 days for every employee: "
-            "total focus time, away time, distraction time and the number "
-            "of tracked sessions.\n\n"
-            "Reports are generated locally from the session data stored on "
-            "this device — nothing is uploaded."
-        )
-        description.setObjectName("MutedLabel")
-        description.setWordWrap(True)
-        layout.addWidget(description)
-
-        layout.addStretch(1)
-
-        reports_button = QPushButton("📈   View Weekly Reports")
-        reports_button.setObjectName("PrimaryButton")
-        reports_button.setMinimumHeight(54)
-        reports_button.setCursor(Qt.PointingHandCursor)
-        reports_button.clicked.connect(self._open_reports_dialog)
-        layout.addWidget(reports_button)
-
-        return card
-
-
-    def _open_reports_dialog(self):
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Weekly Reports")
-        dialog.resize(900, 520)
-
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(theme.SP_5, theme.SP_5, theme.SP_5, theme.SP_5)
-        layout.setSpacing(theme.SP_4)
-
-        title = QLabel("📊   Weekly Summary — Last 7 Days")
-        title.setObjectName("DialogTitle")
-        layout.addWidget(title)
-
-        table = QTableWidget(0, len(WEEKLY_HEADERS))
-        table.setHorizontalHeaderLabels(WEEKLY_HEADERS)
-        table.verticalHeader().setVisible(False)
-        table.horizontalHeader().setFixedHeight(theme.TABLE_HEADER_HEIGHT)
-        table.verticalHeader().setDefaultSectionSize(theme.TABLE_ROW_HEIGHT)
-        table.setShowGrid(False)
-        table.setSelectionMode(QAbstractItemView.NoSelection)
-        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        table.setFocusPolicy(Qt.NoFocus)
-        table.setAlternatingRowColors(True)
-        table.horizontalHeader().setHighlightSections(False)
-        table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-
-        try:
-            rows = self.db.get_weekly_report_all() if self.db else []
-        except Exception as error:
-            logger.warning("weekly report failed", exc_info=True)
-            rows = []
-            QMessageBox.warning(self, "Weekly Reports", f"Could not load data: {error}")
-
-        for report in rows:
-            row = table.rowCount()
-            table.insertRow(row)
-            table.setRowHeight(row, 52)
-
-            name_item = QTableWidgetItem(f"🧑  {report['full_name']}")
-            table.setItem(row, 0, name_item)
-
-            values = [
-                (_fmt_hms(report["total_focus"]), theme.TEXT_PRIMARY),
-                (_fmt_hms(report["total_distraction"]), theme.WARNING),
-                (_fmt_hms(report["total_away"]), theme.TEXT_MUTED),
-                (str(report["total_sessions"]), theme.TEXT_PRIMARY),
-            ]
-            for offset, (value, color) in enumerate(values, start=1):
-                item = QTableWidgetItem(value)
-                item.setForeground(QColor(color))
-                item.setTextAlignment(Qt.AlignCenter)
-                table.setItem(row, offset, item)
-
-        if not rows:
-            table.setRowCount(1)
-            item = QTableWidgetItem("No employees yet.")
-            item.setForeground(QColor(theme.TEXT_MUTED))
-            table.setItem(0, 0, item)
-            table.setSpan(0, 0, 1, len(WEEKLY_HEADERS))
-
-        layout.addWidget(table, 1)
-
-        buttons = QDialogButtonBox(QDialogButtonBox.Close)
-        buttons.rejected.connect(dialog.reject)
-        buttons.accepted.connect(dialog.accept)
-        layout.addWidget(buttons)
-
-        dialog.exec_()
-
-
-
-
 class ManagerScreen(ShellNavigationMixin, QWidget):
     """Manager workspace shell: sidebar on the left, page stack on the right."""
 
@@ -1184,7 +1050,7 @@ class ManagerScreen(ShellNavigationMixin, QWidget):
         self.employees_page = EmployeeStatusPage(user=self.user, db=self.db)
         self.sessions_page = SessionsHistoryPage(user=self.user, db=self.db)
         self.tasks_page = TasksPage(user=self.user, db=self.db)
-        self.reports_page = ReportsPage(user=self.user, db=self.db)
+        self.reports_page = ReportsScreen(user=self.user, db=self.db)
         self.ai_helper_page = AIHelperScreen(user=self.user, db=self.db)
         self.ai_chat_page = AIChatScreen(user=self.user, db=self.db)
         self.knowledge_page = KnowledgeScreen(user=self.user, db=self.db)
@@ -1284,7 +1150,8 @@ class ManagerScreen(ShellNavigationMixin, QWidget):
         self.sessions_page._open_session_detail(session_id)
 
     def _open_reports_dialog(self):
-        self.reports_page._open_reports_dialog()
+        """Kept from the old weekly-report dialog: opens the Reports page."""
+        self._navigate("reports")
 
     @property
     def table(self):

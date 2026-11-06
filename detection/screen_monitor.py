@@ -93,6 +93,7 @@ class ScreenMonitor:
         self.last_title = ""
         self.last_category = SCREEN_IDLE
         self._last_known_title = ""
+        self.last_app = ""           # program name of the focused window
         # When WhatsApp came to the foreground (None = not on WhatsApp).
         self._whatsapp_started_at = None
 
@@ -115,7 +116,11 @@ class ScreenMonitor:
 
                 hwnd = win32gui.GetForegroundWindow()  # never blocks
                 if hwnd == 0:
+                    self.last_app = ""
                     return ""
+                from detection.app_names import active_app_name
+
+                self.last_app = active_app_name(hwnd)       # program name only, never the title
             else:
                 return ""  # only Windows is supported for now
         except Exception:
@@ -212,6 +217,7 @@ class ScreenMonitor:
         return {
             "title": title,
             "category": category,
+            "app": self.last_app,
             "timestamp": now,
             "whatsapp_elapsed": elapsed,
         }

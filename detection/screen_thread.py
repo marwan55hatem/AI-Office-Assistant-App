@@ -27,6 +27,7 @@ class ScreenThread(QThread):
 
     screen_update = pyqtSignal(str, str, int)  # title, category, whatsapp_elapsed
     idle_update = pyqtSignal(bool, int)        # is_idle, idle_seconds
+    app_update = pyqtSignal(str)               # program name ("Chrome"), never a window title
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -49,6 +50,7 @@ class ScreenThread(QThread):
                     sample["category"],
                     sample.get("whatsapp_elapsed", 0),
                 )
+                self.app_update.emit(sample.get("app", ""))
             except Exception:
                 logger.warning("sample failed", exc_info=True)
 

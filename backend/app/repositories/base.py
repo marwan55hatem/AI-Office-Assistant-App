@@ -36,7 +36,7 @@ class TenantRepository(Generic[M]):
     def list(self, *conditions, order_by=None, limit: int | None = None, offset: int = 0) -> list[M]:
         statement = self.query().where(*conditions)
         if order_by is not None:
-            statement = statement.order_by(order_by)
+            statement = statement.order_by(*order_by) if isinstance(order_by, tuple) else statement.order_by(order_by)
         if limit is not None:
             statement = statement.limit(limit).offset(offset)
         return list(self.session.scalars(statement))

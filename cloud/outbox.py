@@ -47,8 +47,10 @@ class Outbox:
                              (session_id, json.dumps(body)))
             self._db.commit()
 
-    def update_session(self, session_id: str, *, ended: bool = False, **counters) -> None:
-        """Record the newest counters (and, at the end, the end time) of a session."""
+    def update_session(self, session_id: str, *, ended: bool = False, apps=None, **counters) -> None:
+        """Record the newest counters (and, at the end, the end time) of a session.
+
+        ``apps`` is ``[{"name", "category", "seconds"}]`` (cumulative); seconds only grow."""
         with self._lock:
             row = self._db.execute("SELECT body FROM pending_sessions WHERE id=?", (session_id,)).fetchone()
             if row is None:
@@ -57,6 +59,14 @@ class Outbox:
             for name in COUNTERS:
                 if name in counters and counters[name] is not None:
                     body[name] = max(int(body.get(name, 0)), int(counters[name]))
+            if apps:
+                known = {a["name"]: a for a in body.get("apps", [])}
+                for app in apps:
+                    old = known.get(app["name"])
+                    if old is None or int(app["seconds"]) >= int(old["seconds"]):
+                        known[app["name"]] = {"name": str(app["name"]), "category": app["category"],
+                                              "seconds": int(app["seconds"])}
+                body["apps"] = list(known.values())[:60]
             if ended:
                 body["ended_at"] = utc_now()
             self._db.execute("UPDATE pending_sessions SET body=?, version=version+1 WHERE id=?",

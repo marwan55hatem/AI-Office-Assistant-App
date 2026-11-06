@@ -31,6 +31,10 @@ os.environ.update({
     "MIGRATIONS_DATABASE_URL": owner_test_url.render_as_string(hide_password=False),
     "JWT_SECRET": secrets.token_urlsafe(48),
     "CORS_ORIGINS": '["http://localhost:3000"]',
+    # The tests must never reach the real model or spend tokens, even when backend/.env holds a
+    # real key: environment variables win over .env, and an empty key means "no model set up".
+    "GROQ_API_KEY": "",
+    "AI_FAKE_MODEL": "0",
 })
 
 
@@ -79,6 +83,8 @@ def clean(owner_engine):
     with owner_engine.begin() as connection:
         connection.execute(text(f"TRUNCATE {', '.join(TENANT_TABLES)}, companies CASCADE"))
     login_limiter.reset()
+    from app.services.report_cache import report_cache
+    report_cache.clear()
     yield
 
 

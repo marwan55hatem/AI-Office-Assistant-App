@@ -9,15 +9,15 @@ import uuid
 from datetime import UTC, date, datetime, time
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from app.core.deps import CurrentUser
+from app.core.deps import CurrentUser, invalidate_reports_after_write
 from app.db.models import Task
 from app.repositories.tenant import TaskRepository
 from app.routers.common import NOT_FOUND, target_user
 
-router = APIRouter(prefix="/tasks", tags=["tasks"])
+router = APIRouter(prefix="/tasks", tags=["tasks"], dependencies=[Depends(invalidate_reports_after_write)])
 
 Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 

@@ -7,17 +7,17 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.core import security
 from app.core.config import get_settings
-from app.core.deps import CurrentManager, CurrentUser
+from app.core.deps import CurrentManager, CurrentUser, invalidate_reports_after_write
 from app.db.models import Company, User
 from app.repositories.tenant import CompanyRepository, InviteRepository, RefreshTokenRepository, UserRepository
 from app.schemas.auth import CompanyOut, InviteCreate, InviteOut, ProfileUpdate, UserOut, UserStatusChange
 from app.services.auth_service import _join_code
 
-router = APIRouter(tags=["people"])
+router = APIRouter(tags=["people"], dependencies=[Depends(invalidate_reports_after_write)])
 NOT_FOUND = HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
 
 

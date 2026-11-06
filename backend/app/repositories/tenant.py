@@ -99,6 +99,10 @@ def email_taken(session: Session, email: str) -> bool:
     return bool(session.execute(text("SELECT auth_email_taken(:email)"), {"email": email}).scalar())
 
 
+class SessionAppRepository(TenantRepository[models.SessionApp]):
+    model = models.SessionApp
+
+
 class AIChatRepository(TenantRepository[models.AIChat]):
     model = models.AIChat
 

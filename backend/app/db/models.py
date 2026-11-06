@@ -38,7 +38,7 @@ def _created():
 TENANT_TABLES = (
     "users", "refresh_tokens", "invites", "sessions", "events", "tasks", "calendar_events",
     "calendar_attendees", "documents", "ai_usage", "meeting_requests", "messages",
-    "notifications", "email_log", "ai_chats", "ai_messages",
+    "notifications", "email_log", "ai_chats", "ai_messages", "session_apps",
 )
 
 
@@ -336,4 +336,29 @@ class AIMessage(Base):
         ForeignKeyConstraint(["company_id", "chat_id"], ["ai_chats.company_id", "ai_chats.id"],
                              name="fk_ai_messages_chat", ondelete="CASCADE"),
         Index("ix_ai_messages_chat", "company_id", "chat_id", "id"),
+    )
+
+
+class SessionApp(Base):
+    """Seconds an employee spent in one application during one session.
+
+    Only the application's display name (for example "Chrome") and its category are
+    stored -- never window titles, page titles or file names. Seconds only grow.
+    """
+    __tablename__ = "session_apps"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    company_id: Mapped[uuid.UUID] = _company_id()
+    session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    app_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    category: Mapped[str] = mapped_column(String(16), nullable=False)
+    seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    __table_args__ = (
+        CheckConstraint("category IN ('productive', 'neutral', 'distraction', 'idle')", name="app_category_valid"),
+        CheckConstraint("seconds >= 0", name="app_seconds_valid"),
+        UniqueConstraint("company_id", "session_id", "app_name", name="uq_session_apps_session_app"),
+        ForeignKeyConstraint(["company_id", "session_id"], ["sessions.company_id", "sessions.id"],
+                             name="fk_session_apps_session", ondelete="CASCADE"),
+        _user_fk("user_id", "fk_session_apps_user"),
+        Index("ix_session_apps_company_user", "company_id", "user_id"),
     )

@@ -181,6 +181,9 @@ class RemoteDatabase:
             self.sync.start()
         for name, repository in REPOSITORIES.items():
             setattr(self, name, repository(self))
+        from cloud.reports_api import ReportsApi
+
+        self.reports = ReportsApi(api)          # manager reports with charts (online only)
 
     # ------------------------------------------------------------------ account
     @property
@@ -281,15 +284,16 @@ class RemoteDatabase:
         return session_id
 
     def update_session_progress(self, session_id, focus_seconds, away_seconds, *, distraction_seconds=0,
-                                screen_productive=0, screen_distracted=0, screen_idle=0):
-        self.outbox.update_session(session_id, focus_seconds=focus_seconds, away_seconds=away_seconds,
+                                screen_productive=0, screen_distracted=0, screen_idle=0, apps=None):
+        self.outbox.update_session(session_id, apps=apps, focus_seconds=focus_seconds, away_seconds=away_seconds,
                                    distraction_seconds=distraction_seconds,
                                    screen_productive_seconds=screen_productive,
                                    screen_distracted_seconds=screen_distracted, screen_idle_seconds=screen_idle)
 
     def end_session(self, session_id, focus_seconds, away_seconds, *, distraction_seconds=0,
-                    screen_productive=0, screen_distracted=0, screen_idle=0):
-        self.outbox.update_session(session_id, ended=True, focus_seconds=focus_seconds, away_seconds=away_seconds,
+                    screen_productive=0, screen_distracted=0, screen_idle=0, apps=None):
+        self.outbox.update_session(session_id, ended=True, apps=apps, focus_seconds=focus_seconds,
+                                   away_seconds=away_seconds,
                                    distraction_seconds=distraction_seconds,
                                    screen_productive_seconds=screen_productive,
                                    screen_distracted_seconds=screen_distracted, screen_idle_seconds=screen_idle)

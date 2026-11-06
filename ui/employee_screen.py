@@ -255,7 +255,10 @@ class SessionPage(QWidget):
         self.session_button.clicked.connect(self._toggle_session)
         card_layout.addWidget(self.session_button)
 
-        footer = QLabel("🔒  All data stored locally on this device")
+        online = getattr(self.db, "api", None) is not None
+        footer = QLabel("🔒  Timers and app names go to your company · camera images never leave this PC"
+                        if online else "🔒  All data stored locally on this device")
+        footer.setWordWrap(True)
         footer.setObjectName("MutedLabel")
         footer.setAlignment(Qt.AlignCenter)
         card_layout.addWidget(footer)
@@ -503,6 +506,7 @@ class SessionPage(QWidget):
         self.screen_thread = ScreenThread()
         self.screen_thread.screen_update.connect(self._on_screen)
         self.screen_thread.idle_update.connect(self._on_idle)
+        self.screen_thread.app_update.connect(self._on_app)
         self.screen_thread.start()
 
         self.timer.start()
@@ -549,6 +553,7 @@ class SessionPage(QWidget):
                     screen_productive=state.screen_productive,
                     screen_distracted=state.screen_distracted,
                     screen_idle=state.screen_idle,
+                    apps=state.apps_snapshot(),
                 )
             except Exception:
                 logger.warning("Could not save session", exc_info=True)
@@ -662,6 +667,11 @@ class SessionPage(QWidget):
             self._set_badge(self.idle_badge, INPUT_IDLE_TEXT, theme.TEXT_MUTED)
 
 
+    def _on_app(self, app_name):
+        """The program in front (its name only); counted per second while at the desk."""
+        if self.session_state is not None:
+            self.session_state.app_name = app_name
+
     def _on_screen(self, title, category, whatsapp_elapsed=0):
         if self.session_state is None:
             return
@@ -724,7 +734,8 @@ class SessionPage(QWidget):
         try:
             update(self.session_id, state.focus_seconds, state.away_seconds,
                    distraction_seconds=state.distraction_seconds, screen_productive=state.screen_productive,
-                   screen_distracted=state.screen_distracted, screen_idle=state.screen_idle)
+                   screen_distracted=state.screen_distracted, screen_idle=state.screen_idle,
+                   apps=state.apps_snapshot())
         except Exception:
             logger.warning("Saving the session progress failed", exc_info=True)
 

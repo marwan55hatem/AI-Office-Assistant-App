@@ -140,3 +140,34 @@ app's "Sources:" line (cosmetic).
 
 **Still open**: the new installer and its measured size (Phase 9 rebuild); `THIRD_PARTY_NOTICES.md` and the docs still list
 Qwen (Phase 9).
+
+## Phase 4 — Manager reports with graphs and analytics
+
+**Backend** (`backend/app/services/reports.py`, `routers/reports.py`): `GET /reports/overview`,
+`/reports/trends` (day or week buckets) and `/reports/employee/{id}`, all for a date range (max 366 days).
+Metrics: focus / distracted / away %, hours worked, daily and weekly trends, per-employee ranking
+(paginated, sortable), most-used apps, task completion rate, attendance by day, employee vs team average,
+and change against the previous period of the same length.
+
+Definitions: hours worked = focus + distracted time; tasks completion = tasks created in the range that
+are done; attendance = at least one session that day; days are the employee's local dates; only active
+employees count. A change is shown only when both periods have data ("no earlier data" otherwise, never a
+fake 0 % or "+100 pts").
+
+**Cache**: in-process, 30 s, one entry per company and query; cleared on task and people writes (not on
+session syncs, so a figure can be up to 30 s old).
+
+**App usage (new data)**: the desktop records the *program name* of the window in front (from the process
+image, never the window title) and syncs per-session seconds per app (`session_apps` table, migration
+`0003_phase4_session_apps`, row-level security like every tenant table). The privacy text must say that
+app names now reach the server (Phase 9). Video and screenshots still never leave the PC.
+
+**Desktop**: the old weekly-report card is replaced by a Reports page (online only): filters (period,
+custom dates, employee), six KPI cards with change arrows, focus line chart (with team average for one
+employee), stacked hours, ranking bars, attendance, app donut, sortable paginated table, drill-down by
+double-click, export to CSV (formula-injection safe) and PDF. Charts are drawn with QPainter (no new
+dependency) and follow the light/dark theme. Screenshots: `screenshots_redesign/cloud/phase4_*`.
+
+**Tests**: backend 130 passed (1 skipped), 28 new report tests with seeded data for each metric plus
+isolation sweeps; desktop 215 passed (19 app-usage + 14 charts/export/page tests). Real-window run against
+a live server with 12 seeded employees: 18/18 checks, 0 warnings.

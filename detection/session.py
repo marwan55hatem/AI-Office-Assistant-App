@@ -45,6 +45,11 @@ class SessionState:
         self.screen_title = ""
         self.screen_category = SCREEN_IDLE
 
+        # the program in front (display name only) and the seconds spent in each while at the
+        # desk: {name: {category: seconds}}
+        self.app_name = ""
+        self.app_seconds = {}
+
         # input-derived (keyboard / mouse)
         self.input_idle = False
         self.idle_seconds = 0
@@ -124,12 +129,33 @@ class SessionState:
             if self.screen_category == SCREEN_DISTRACTION and not self.phone:
                 self.screen_distracted += 1
             self.last_tick_counted = True
+            self._count_app()
             return
 
         self.focus_seconds += 1
         if self.screen_category == SCREEN_PRODUCTIVE:
             self.screen_productive += 1
         self.last_tick_counted = True
+        self._count_app()
+
+    def _count_app(self) -> None:
+        """Add this (focus or distracted) second to the program in front."""
+        if self.app_name and self.screen_category != SCREEN_IDLE:
+            per_category = self.app_seconds.setdefault(self.app_name, {})
+            per_category[self.screen_category] = per_category.get(self.screen_category, 0) + 1
+
+    def apps_snapshot(self, limit: int = 60):
+        """``[{"name", "category", "seconds"}]`` for the programs used so far, most used first.
+
+        ``seconds`` only ever grows. A program used in several categories (a browser on a
+        work page, then on a video site) is one entry under the category it was mostly in.
+        """
+        rows = []
+        for name, per_category in self.app_seconds.items():
+            category = max(per_category, key=per_category.get)
+            rows.append({"name": name, "category": category, "seconds": sum(per_category.values())})
+        rows.sort(key=lambda row: (-row["seconds"], row["name"].lower()))
+        return rows[:limit]
 
     def take_state_change(self) -> Optional[str]:
         """Return the new state when it differs from the last logged one.

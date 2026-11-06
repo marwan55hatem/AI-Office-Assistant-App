@@ -9,11 +9,12 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
 
 from app.core.deps import CurrentUser
-from app.db.models import Event, WorkSession
+from app.db.models import Event, SessionApp, WorkSession
 from app.repositories.tenant import EventRepository, SessionRepository
 from app.routers.common import NOT_FOUND, target_user, user_names
 
@@ -24,8 +25,18 @@ Seconds = Annotated[int, Field(ge=0, le=7 * 24 * 3600)]
 LIVE_WINDOW = timedelta(minutes=2)
 
 
+class AppIn(BaseModel):
+    """Seconds in one application so far in this session (cumulative). Names only, no titles."""
+    model_config = ConfigDict(extra="forbid")
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80,
+                                           pattern=r"^[^\x00-\x1f\x7f]+$")]
+    category: Literal["productive", "neutral", "distraction", "idle"]
+    seconds: Seconds
+
+
 class SessionIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    apps: Annotated[list[AppIn], Field(max_length=60)] = []
     id: uuid.UUID
     local_date: date
     started_at: datetime
@@ -104,6 +115,7 @@ def sync(batch: SyncBatch, principal: CurrentUser):
     sessions = SessionRepository(principal.session, principal.company_id)
     now = datetime.now(UTC)
     stored_sessions = 0
+    saved_ids: set[uuid.UUID] = set()      # sessions of this user that this batch stored
     for item in batch.sessions:
         row = sessions.get(item.id)
         if row is None:
@@ -120,6 +132,24 @@ def sync(batch: SyncBatch, principal: CurrentUser):
         else:
             continue
         stored_sessions += 1
+        saved_ids.add(item.id)
+
+    merged: dict[tuple, dict] = {}         # one row per (session, app), even if the client repeats a name
+    for item in batch.sessions:
+        if item.id in saved_ids:
+            for app in item.apps:
+                row = merged.setdefault((item.id, app.name), {
+                    "company_id": principal.company_id, "session_id": item.id, "user_id": principal.user.id,
+                    "app_name": app.name, "category": app.category, "seconds": 0})
+                row["seconds"] = max(row["seconds"], app.seconds)
+    app_rows = list(merged.values())
+    if app_rows:
+        # cumulative counters only grow, so a late older sample never lowers them
+        statement = insert(SessionApp).values(app_rows)
+        principal.session.execute(statement.on_conflict_do_update(
+            constraint="uq_session_apps_session_app",
+            set_={"seconds": func.greatest(SessionApp.seconds, statement.excluded.seconds),
+                  "category": statement.excluded.category}))
 
     own_sessions = {s.id for s in sessions.list(WorkSession.user_id == principal.user.id,
                                                  WorkSession.id.in_({e.session_id for e in batch.events}))} \
@@ -174,5 +204,6 @@ def get_session(session_id: uuid.UUID, principal: CurrentUser):
 def session_events(session_id: uuid.UUID, principal: CurrentUser):
     _visible_session(principal, session_id)
     events = EventRepository(principal.session, principal.company_id)
-    return events.list(Event.session_id == session_id, order_by=Event.occurred_at)
+    # events recorded in the same instant keep the order they were sent in
+    return events.list(Event.session_id == session_id, order_by=(Event.occurred_at, Event.id))
 

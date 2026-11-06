@@ -9,7 +9,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -56,6 +56,21 @@ def manager_principal(principal: Annotated[Principal, Depends(current_principal)
     if not principal.is_manager:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only a manager can do this")
     return principal
+
+
+def invalidate_reports_after_write(request: Request,
+                                   credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]):
+    """Router dependency: after a change that alters report numbers (tasks, people), forget
+    the company's cached reports. Declared before ``current_principal`` so it runs *after*
+    the request's transaction has been committed."""
+    yield
+    if request.method != "GET" and credentials is not None:
+        try:
+            claims = decode_token(credentials.credentials, ACCESS)
+        except TokenError:
+            return
+        from app.services.report_cache import report_cache
+        report_cache.invalidate(claims["cid"])
 
 
 CurrentUser = Annotated[Principal, Depends(current_principal)]
