@@ -257,3 +257,46 @@ Desktop 230 passed (12 new: both roles' buttons per state, dialogs, server refus
 escaping, the client's ISO times, tray notifications). Real-window run of the whole flow for both roles
 against a live server with its own e-mail worker: 22/22 checks, 0 warnings. Screenshots:
 `screenshots_redesign/cloud/phase6_*` (manager and employee, light and dark).
+
+## Phase 7 — Chat between each employee and the manager
+
+**Server** (`/chat`):
+- One private conversation per employee, with every manager of the company (a shared inbox: any
+  manager can answer). Other employees and other companies get 404 for it, like an unknown id.
+- HTTP is the source of truth: `POST /chat/{employee}/messages`, paged history
+  (`GET .../messages`: the latest 50, `before_id` for older, `after_id` to catch up), `POST .../read`,
+  `GET /chat/conversations` (managers: unread first, then the most recent) and `GET /chat/unread-count`.
+- **Live**: WebSocket `/chat/ws`. The access token is the first message (never in the URL, which ends up
+  in logs); the socket closes with 4001 when the token expires and 4003 on a bad token. It pushes
+  `message`, `delivered`, `read` and `typing` events. Pushes are sent only **after the commit**
+  (a new SQLAlchemy after-commit hook), so nobody sees a message that was rolled back.
+- **Delivered** = reached a device of the other side (pushed to an open connection, or fetched over
+  HTTP); **read** = the other side opened the conversation.
+- Limits: 4000 characters (control characters removed, empty refused), 10 messages per 10 s and 60 per
+  minute per person (429).
+- A new message creates one unread in-app notification per conversation (later messages update it);
+  reading the conversation clears it. If the reader is offline, one `chat_unread` e-mail per conversation
+  is queued for 10 minutes later (`CHAT_EMAIL_DELAY_MINUTES`) and skipped if by then the message was read
+  or the person is online. The e-mail never contains the message text. The Settings switch now reads
+  "E-mail me about meetings and unread messages".
+- Limitation: live connections are kept in the API process, so this is for **one** server instance; more
+  instances need a shared channel (PostgreSQL LISTEN/NOTIFY or Redis) behind `ChatHub.publish`. Clients
+  lose nothing either way: they catch up over HTTP.
+
+**Desktop**: a **Messages** page. Managers: the conversation list (unread counts, previews) and the chat;
+employees: one chat with "your manager". Bubbles show Sent / Delivered / Read, the sender's name, and
+"… is typing". Enter sends, Shift+Enter is a new line. The live channel (`cloud/chat_socket.py`, Qt's
+`QWebSocket`) reconnects on its own (2 s, 5 s, 10 s, 30 s; at once with a fresh token after expiry); while
+it is down the page polls every 5 s. The sidebar shows an unread badge; signing out closes the channel.
+
+Fixed in passing: `ui.widgets.clear_layout` now also removes widgets inside nested layouts (old chat
+bubbles were left behind when switching conversations), and a page-teardown crash caused by a Qt event
+filter (replaced with a small `Composer` input class).
+
+**Tests**: backend 206 passed (1 skipped), 14 new: ordering, paging both ways, isolation, conversation
+order, read and delivered state, message rules, the flood limit, disabled accounts, notifications, the
+delayed e-mail (no text, one per burst, skipped when read), the live channel (delivery, receipts, typing
+only to the right people, no e-mail while online), bad/missing tokens, and closing on token expiry.
+Desktop 241 passed (11 new). **Two-client check** (two real app windows, manager and employee, against a
+live server): 21/21 checks in three runs in a row, 0 warnings. Messages arrive live in about 0.1 s, and
+in about 7 s by polling when the live channel is down. Screenshots: `screenshots_redesign/cloud/phase7_*`.

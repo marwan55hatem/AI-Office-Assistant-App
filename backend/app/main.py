@@ -7,8 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.db.session import check_app_role
-from app.routers import (ai, auth, calendar, content, emails, meeting_requests, notifications, people, reports,
-                         sessions, stats, tasks)
+from app.routers import (ai, auth, calendar, chat, content, emails, meeting_requests, notifications, people,
+                         reports, sessions, stats, tasks)
 from app.services.email.providers import get_provider
 from app.services.email.worker import EmailWorker
 
@@ -50,7 +50,8 @@ def create_app() -> FastAPI:
                        allow_headers=["Authorization", "Content-Type"])
     app.include_router(auth.router)
     app.include_router(people.router)
-    for module in (sessions, stats, tasks, calendar, content, ai, reports, emails, meeting_requests, notifications):
+    for module in (sessions, stats, tasks, calendar, content, ai, reports, emails, meeting_requests, notifications,
+                   chat):
         app.include_router(module.router)
 
     @app.get("/health", tags=["health"])

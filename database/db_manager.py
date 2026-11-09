@@ -390,6 +390,21 @@ class DatabaseManager:
     def cancel_meeting_request(self, request_id, reason=None):
         return False, self.OFFLINE_ONLY
 
+    def get_chat_conversations(self):
+        return []
+
+    def get_chat_messages(self, employee_id, before_id=None, after_id=None, limit=50):
+        return None
+
+    def send_chat_message(self, employee_id, body):
+        return False, "Messages need the online server"
+
+    def mark_chat_read(self, employee_id, up_to_id):
+        return False
+
+    def count_unread_chat(self):
+        return 0
+
     def get_notifications(self, unread_only=False, limit=50):
         return []
 

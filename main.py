@@ -230,6 +230,9 @@ class App(QStackedWidget):
             stop = getattr(old, "stop_session_if_running", None)
             if callable(stop):
                 stop()
+            shutdown = getattr(old, "shutdown", None)       # e.g. the chat's live connection
+            if callable(shutdown):
+                shutdown()
             self.removeWidget(old)
             old.deleteLater()
 

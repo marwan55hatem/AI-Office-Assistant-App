@@ -89,6 +89,11 @@ def clean(owner_engine):
     login_limiter.reset()
     from app.services.report_cache import report_cache
     report_cache.clear()
+    from app.routers.chat import burst_limiter, minute_limiter
+    from app.services.chat_hub import hub
+    burst_limiter.reset()
+    minute_limiter.reset()
+    hub.clear()
     yield
 
 

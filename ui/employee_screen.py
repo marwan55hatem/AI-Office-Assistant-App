@@ -64,6 +64,7 @@ EMPLOYEE_ITEMS = [
     ("item", "session", "⏱️", "Session"),
     ("item", "calendar", "\U0001F4C5", "Calendar"),
     ("item", "meetings", "\U0001F91D", "Meetings"),
+    ("item", "messages", "\U0001F5E8\uFE0F", "Messages"),
     ("item", "todo", "\U0001F4CB", "To Do"),
     ("item", "ai_helper", "\U0001F916", "AI Helper"),
     ("item", "ai_chat", "\U0001F4AC", "AI Chat"),
@@ -829,6 +830,9 @@ class EmployeeScreen(ShellNavigationMixin, QWidget):
         from ui.meetings_screen import MeetingsScreen
         self.meetings_page = MeetingsScreen(user={**self.user, "role": "employee"}, db=self.db)
         self.meetings_page.changed.connect(self._refresh_calendar_badge)
+        from ui.messages_screen import MessagesScreen
+        self.messages_page = MessagesScreen(user={**self.user, "role": "employee"}, db=self.db)
+        self.messages_page.unread_changed.connect(self._on_unread_messages)
 
         self.stack = QStackedWidget()
         self._page_index = {}
@@ -836,6 +840,7 @@ class EmployeeScreen(ShellNavigationMixin, QWidget):
             ("session", self.session_page),
             ("calendar", self.calendar_page),
             ("meetings", self.meetings_page),
+            ("messages", self.messages_page),
             ("todo", self.todo_page),
             ("ai_helper", self.ai_helper_page),
             ("ai_chat", self.ai_chat_page),

@@ -98,6 +98,13 @@ class MeetingRepo(_Repository):
     )
 
 
+class ConversationRepo(_Repository):
+    """The private chat between each employee and the managers (online only)."""
+
+    METHODS = ("get_chat_conversations", "get_chat_messages", "send_chat_message", "mark_chat_read",
+               "count_unread_chat")
+
+
 class ChatRepo(_Repository):
     """AI Chat conversations and their messages."""
 
@@ -130,6 +137,7 @@ REPOSITORIES = {
     "tasks": TaskRepo,
     "calendar": CalendarRepo,
     "meetings": MeetingRepo,
+    "conversations": ConversationRepo,
     "chats": ChatRepo,
     "knowledge": KnowledgeRepo,
     "admin": AdminRepo,

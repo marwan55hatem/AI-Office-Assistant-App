@@ -7,9 +7,11 @@
   the window can show its banner; the next successful call marks it online again.
 * Passwords are sent only to the sign-in endpoints and are never stored or logged.
 """
+import base64
 import json
 import logging
 import threading
+import time
 from typing import Callable
 
 import httpx
@@ -35,6 +37,16 @@ class Offline(Exception):
 
 class SessionExpired(Exception):
     """The sign-in is no longer valid; the user must sign in again."""
+
+
+def _expires_in(token: str) -> float:
+    """Seconds until a JWT expires, read without checking the signature (the server checks it)."""
+    try:
+        payload = token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+        return float(claims["exp"]) - time.time()
+    except (IndexError, ValueError, KeyError, TypeError):
+        return 0.0
 
 
 def _message(response: httpx.Response) -> str:
@@ -161,6 +173,22 @@ class ApiClient:
 
     def delete(self, path):
         return self.request("DELETE", path)
+
+    # ------------------------------------------------------------------ the live channel
+    def socket_url(self, path: str) -> str:
+        """``ws://`` / ``wss://`` address of a WebSocket endpoint on the same server."""
+        base = self.base_url
+        if base.startswith("https://"):
+            return "wss://" + base[len("https://"):] + path
+        return "ws://" + base[len("http://"):] + path if base.startswith("http://") else base + path
+
+    def socket_token(self, force: bool = False) -> str:
+        """An access token for the WebSocket, refreshed first when it has (almost) expired."""
+        if not self.signed_in:
+            raise SessionExpired("Not signed in")
+        if force or self._access_token is None or _expires_in(self._access_token) < 60:
+            self._refresh()
+        return self._access_token
 
     # ------------------------------------------------------------------ tokens
     def _store_tokens(self, pair: dict, remember: bool = True) -> None:

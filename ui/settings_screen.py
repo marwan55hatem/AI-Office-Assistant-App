@@ -355,7 +355,7 @@ class SettingsScreen(QWidget):
         card, layout = make_card(
             "✉️  Notifications",
             "E-mails from your company's Office Assistant server to your sign-in address.")
-        self.email_meetings_check = QCheckBox("E-mail me about meetings (invites, changes and cancellations)")
+        self.email_meetings_check = QCheckBox("E-mail me about meetings and unread messages")
         self.email_meetings_check.setCursor(Qt.PointingHandCursor)
         self.email_meetings_check.toggled.connect(self._on_email_toggled)
         layout.addWidget(self.email_meetings_check)

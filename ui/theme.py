@@ -1137,6 +1137,7 @@ QListWidget#ChatList::item:hover {
 QListWidget#ChatList::item:selected {
     background-color: ${ACCENT_SOFT};
     border: 1px solid ${ACCENT};
+    color: ${TEXT_PRIMARY};
 }
 
 QLabel#ChatItemTitle {
@@ -1431,6 +1432,36 @@ QCheckBox::indicator:checked {
 QCheckBox::indicator:disabled {
     border: 1px solid ${BORDER};
     background-color: ${SURFACE};
+}
+
+/* ===================== manager-employee chat ===================== */
+QFrame#ChatBubbleMine {
+    background-color: ${ACCENT_SOFT};
+    border: 1px solid ${ACCENT_BORDER_RGBA};
+    border-radius: 14px;
+}
+
+QFrame#ChatBubbleTheirs {
+    background-color: ${SURFACE_HOVER};
+    border: 1px solid ${BORDER};
+    border-radius: 14px;
+}
+
+QLabel#ChatText {
+    color: ${TEXT_PRIMARY};
+    background: transparent;
+}
+
+QLabel#ChatSender {
+    color: ${ACCENT_TEXT};
+    font-weight: 600;
+    background: transparent;
+}
+
+QLabel#ChatMeta {
+    color: ${TEXT_MUTED};
+    font-size: 11px;
+    background: transparent;
 }
 
 QRadioButton {

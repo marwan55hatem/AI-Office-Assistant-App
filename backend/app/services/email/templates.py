@@ -12,7 +12,7 @@ from datetime import date, datetime, time
 LANGUAGES = ("en", "ar")
 TEMPLATES = ("task_urgent", "meeting_invite", "meeting_changed", "meeting_cancelled", "meeting_request_new",
              "meeting_request_accepted", "meeting_request_declined", "meeting_request_rescheduled",
-             "meeting_request_cancelled", "test")
+             "meeting_request_cancelled", "chat_unread", "test")
 #: templates without an "Open" link (there is nothing left to open)
 NO_LINK = ("meeting_cancelled", "meeting_request_cancelled")
 
@@ -35,6 +35,8 @@ TEXT = {
         "test.lead": "This is a test e-mail from Office Assistant. If you can read it, e-mail is set up correctly.",
         "label.task": "Task", "label.meeting": "Meeting", "label.due": "Due", "label.when": "When",
         "label.who": "From",
+        "chat_unread.subject": "New message from {who}",
+        "chat_unread.lead": "{who} sent you a message in Office Assistant. Open the app to read it and reply.",
         "label.topic": "Topic", "label.times": "Proposed times", "label.note": "Note", "label.reason": "Reason",
         "meeting_request_new.subject": "Meeting request: {title}",
         "meeting_request_new.lead": "{who} asked for a meeting with you.",
@@ -49,7 +51,7 @@ TEXT = {
         "no_deadline": "No deadline", "all_day": "All day",
         "open": "Open in Office Assistant",
         "app_hint": "You can also open the Office Assistant app on your computer.",
-        "footer.optional": "You can turn off meeting e-mails in the app: Settings → Notifications.",
+        "footer.optional": "You can turn off these e-mails in the app: Settings → Notifications.",
         "footer.urgent": "E-mails about urgent tasks are always sent.",
     },
     "ar": {
@@ -66,6 +68,8 @@ TEXT = {
         "test.lead": "هذه رسالة تجريبية من Office Assistant. إذا وصلتك فإعداد البريد يعمل بشكل صحيح.",
         "label.task": "المهمة", "label.meeting": "الاجتماع", "label.due": "موعد التسليم", "label.when": "الموعد",
         "label.who": "من",
+        "chat_unread.subject": "رسالة جديدة من {who}",
+        "chat_unread.lead": "أرسل لك {who} رسالة في Office Assistant. افتح التطبيق لقراءتها والرد عليها.",
         "label.topic": "الموضوع", "label.times": "المواعيد المقترحة", "label.note": "ملاحظة", "label.reason": "السبب",
         "meeting_request_new.subject": "طلب اجتماع: {title}",
         "meeting_request_new.lead": "طلب {who} اجتماعاً معك.",
@@ -80,7 +84,7 @@ TEXT = {
         "no_deadline": "بدون موعد نهائي", "all_day": "طوال اليوم",
         "open": "افتح في Office Assistant",
         "app_hint": "يمكنك أيضاً فتح تطبيق Office Assistant على حاسوبك.",
-        "footer.optional": "يمكنك إيقاف رسائل الاجتماعات من التطبيق: الإعدادات ← الإشعارات.",
+        "footer.optional": "يمكنك إيقاف هذه الرسائل من التطبيق: الإعدادات ← الإشعارات.",
         "footer.urgent": "تُرسل رسائل المهام العاجلة دائماً.",
     },
 }
@@ -88,7 +92,8 @@ TEXT = {
 PATHS = {"task_urgent": "/tasks", "meeting_invite": "/calendar", "meeting_changed": "/calendar",
          "meeting_cancelled": "/calendar", "test": "", "meeting_request_new": "/meetings",
          "meeting_request_accepted": "/meetings", "meeting_request_declined": "/meetings",
-         "meeting_request_rescheduled": "/meetings", "meeting_request_cancelled": "/meetings"}
+         "meeting_request_rescheduled": "/meetings", "meeting_request_cancelled": "/meetings",
+         "chat_unread": "/messages"}
 
 
 @dataclass(frozen=True)
@@ -133,7 +138,7 @@ def render(template: str, language: str, payload: dict, recipient_name: str, lin
     t = TEXT[language]
     title = (payload.get("title") or "")[:200]
     who = (payload.get("who") or "")[:120]
-    subject = t[f"{template}.subject"].format(title=title).replace("\n", " ")
+    subject = t[f"{template}.subject"].format(title=title, who=who).replace("\n", " ")
     lead = t[f"{template}.lead"].format(who=who)
     rows = []
     if template == "task_urgent":

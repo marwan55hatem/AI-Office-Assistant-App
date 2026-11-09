@@ -46,6 +46,16 @@ class ShellNavigationMixin:
             if key not in self.WORKS_OFFLINE:
                 self.sidebar.set_item_enabled(key, online, "needs a connection")
 
+    def shutdown(self):
+        """The shell is being replaced (sign-out): close live connections."""
+        page = getattr(self, "messages_page", None)
+        if page is not None:
+            page.shutdown()
+
+    def _on_unread_messages(self, count):
+        if "messages" in self._page_index:
+            self.sidebar.set_badge("messages", count)
+
     def _refresh_calendar_badge(self):
         """Show how many events today (created or invited) on the Calendar item, and how many
         meeting requests wait for this user on the Meetings item."""
@@ -58,5 +68,8 @@ class ShellNavigationMixin:
             logger.warning("Updating the badges failed", exc_info=True)
             return
         self.sidebar.set_badge("calendar", count)
+        page = getattr(self, "messages_page", None)
+        if page is not None:
+            page.refresh_unread()
         if "meetings" in self._page_index:
             self.sidebar.set_badge("meetings", waiting)

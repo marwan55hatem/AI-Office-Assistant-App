@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     email_worker_enabled: bool = True
     email_poll_seconds: float = 10.0
     email_max_attempts: int = 5
+    #: a chat message still unread (and its reader offline) this long later is e-mailed
+    chat_email_delay_minutes: int = 10
 
     #: Development only: allow an app role that bypasses RLS (never in production).
     allow_rls_bypass: bool = False

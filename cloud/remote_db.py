@@ -524,6 +524,30 @@ class RemoteDatabase:
     def cancel_meeting_request(self, request_id, reason=None):
         return True, self.api.post(f"/meeting-requests/{request_id}/cancel", {"reason": reason or None})
 
+    # ------------------------------------------------------------------ chat with the manager (Phase 7)
+    @reads(list)
+    def get_chat_conversations(self):
+        """Managers: every employee's conversation (news first). Employees: their own one."""
+        return self.api.get("/chat/conversations")
+
+    @reads(None)
+    def get_chat_messages(self, employee_id, before_id=None, after_id=None, limit=50):
+        """``{"messages": [...oldest first], "has_more": bool}`` or None when offline."""
+        return self.api.get(f"/chat/{employee_id}/messages", before_id=before_id, after_id=after_id, limit=limit)
+
+    @writes(_pair)
+    def send_chat_message(self, employee_id, body):
+        return True, self.api.post(f"/chat/{employee_id}/messages", {"body": body})
+
+    @writes(_false)
+    def mark_chat_read(self, employee_id, up_to_id):
+        self.api.post(f"/chat/{employee_id}/read", {"up_to_id": int(up_to_id)})
+        return True
+
+    @reads(0)
+    def count_unread_chat(self):
+        return int(self.api.get("/chat/unread-count").get("unread", 0))
+
     # ------------------------------------------------------------------ in-app notifications
     @reads(list)
     def get_notifications(self, unread_only=False, limit=50):

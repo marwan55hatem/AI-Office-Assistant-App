@@ -8,13 +8,18 @@ CARD_MARGINS = (32, 28, 32, 32)       # left, top, right, bottom padding inside 
 
 
 def clear_layout(layout):
-    """Remove and delete every widget in ``layout`` (the layout itself stays)."""
+    """Remove and delete every widget in ``layout``, including those inside nested layouts
+    (the layout itself stays). Without the recursion, widgets of a nested row layout would
+    stay behind, still drawn on the parent widget."""
     while layout.count():
         item = layout.takeAt(0)
         widget = item.widget()
         if widget is not None:
             widget.setParent(None)
             widget.deleteLater()
+        elif item.layout() is not None:
+            clear_layout(item.layout())
+            item.layout().deleteLater()
 
 
 def make_card(title_text, subtitle=None):

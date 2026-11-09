@@ -74,6 +74,7 @@ MANAGER_ITEMS = [
     ("item", "home", "\U0001F3E0", "Home"),
     ("item", "calendar", "\U0001F4C5", "Calendar"),
     ("item", "meetings", "\U0001F91D", "Meetings"),
+    ("item", "messages", "\U0001F5E8\uFE0F", "Messages"),
     ("item", "employees", "🧑", "Employees"),
     ("item", "sessions", "\U0001F552", "Sessions"),
     ("item", "tasks", "\u2705", "Tasks"),
@@ -1062,6 +1063,9 @@ class ManagerScreen(ShellNavigationMixin, QWidget):
         from ui.meetings_screen import MeetingsScreen
         self.meetings_page = MeetingsScreen(user={**self.user, "role": "manager"}, db=self.db)
         self.meetings_page.changed.connect(self._refresh_calendar_badge)
+        from ui.messages_screen import MessagesScreen
+        self.messages_page = MessagesScreen(user={**self.user, "role": "manager"}, db=self.db)
+        self.messages_page.unread_changed.connect(self._on_unread_messages)
 
         self.employees_page.employees_changed.connect(self.tasks_page.refresh)
         self.home_page.go_to_employees.connect(
@@ -1074,6 +1078,7 @@ class ManagerScreen(ShellNavigationMixin, QWidget):
             ("home", self.home_page),
             ("calendar", self.calendar_page),
             ("meetings", self.meetings_page),
+            ("messages", self.messages_page),
             ("employees", self.employees_page),
             ("sessions", self.sessions_page),
             ("tasks", self.tasks_page),

@@ -54,6 +54,8 @@ def deliver(session, row: EmailLog, provider: EmailProvider, now: datetime) -> s
         _finish(row, "skipped", OPTED_OUT)
     elif isinstance(provider, OffProvider):
         _finish(row, "skipped", "e-mail is switched off on the server")
+    elif row.template == "chat_unread" and (reason := _chat_skip_reason(session, row)):
+        _finish(row, "skipped", reason)
     else:
         rendered = render(row.template, user.language, row.payload, user.full_name, settings.app_link_url)
         message = OutgoingEmail(to=user.email, subject=rendered.subject, text=rendered.text, html=rendered.html,
@@ -79,6 +81,11 @@ def deliver(session, row: EmailLog, provider: EmailProvider, now: datetime) -> s
             row.sent_at = now
     logger.info("e-mail #%s template=%s status=%s attempts=%s", row.id, row.template, row.status, row.attempts)
     return row.status
+
+
+def _chat_skip_reason(session, row: EmailLog) -> str | None:
+    from app.routers.chat import chat_email_skip_reason      # the chat decides (online? already read?)
+    return chat_email_skip_reason(session, row)
 
 
 def process_due(provider: EmailProvider | None = None, now: datetime | None = None, per_company: int = 50) -> dict:
