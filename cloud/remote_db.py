@@ -54,6 +54,15 @@ def _days_ago(days: int) -> str:
     return (date.today() - timedelta(days=max(int(days), 1) - 1)).isoformat()
 
 
+def _iso(value) -> str:
+    """A time-zone-aware datetime (or an ISO string) as ISO-8601 with its offset."""
+    if isinstance(value, str):
+        return value
+    if value.tzinfo is None:
+        value = value.astimezone()                    # a naive time is this computer's local time
+    return value.isoformat()
+
+
 def _user(row):
     if row is None:
         return None
@@ -474,6 +483,61 @@ class RemoteDatabase:
     @writes(_none)
     def delete_task(self, task_id):
         self.api.delete(f"/tasks/{task_id}")
+
+    # ------------------------------------------------------------------ meeting requests (Phase 6)
+    @reads(list)
+    def get_meeting_requests(self, status=None):
+        """Your requests (employee) or the company's (manager), newest change first.
+        ``status``: pending / accepted / declined / rescheduled / cancelled / open."""
+        return self.api.get("/meeting-requests", status=status)
+
+    @reads(0)
+    def count_meeting_requests_waiting(self):
+        """Requests waiting for you: pending ones for a manager, rescheduled ones for an employee."""
+        return int(self.api.get("/meeting-requests/waiting-count").get("waiting", 0))
+
+    @writes(_pair)
+    def request_meeting(self, topic, proposed_times, note=None, duration_minutes=30):
+        """``proposed_times``: 1-3 time-zone-aware datetimes (or ISO strings with an offset)."""
+        row = self.api.post("/meeting-requests", {"topic": topic, "note": note or None,
+                                                  "proposed_times": [_iso(t) for t in proposed_times],
+                                                  "duration_minutes": duration_minutes})
+        return True, row
+
+    @writes(_pair)
+    def accept_meeting_request(self, request_id, time, duration_minutes=None):
+        body = {"time": _iso(time)}
+        if duration_minutes:
+            body["duration_minutes"] = duration_minutes
+        return True, self.api.post(f"/meeting-requests/{request_id}/accept", body)
+
+    @writes(_pair)
+    def decline_meeting_request(self, request_id, reason):
+        return True, self.api.post(f"/meeting-requests/{request_id}/decline", {"reason": reason})
+
+    @writes(_pair)
+    def reschedule_meeting_request(self, request_id, proposed_times, note=None):
+        return True, self.api.post(f"/meeting-requests/{request_id}/reschedule",
+                                   {"proposed_times": [_iso(t) for t in proposed_times], "note": note or None})
+
+    @writes(_pair)
+    def cancel_meeting_request(self, request_id, reason=None):
+        return True, self.api.post(f"/meeting-requests/{request_id}/cancel", {"reason": reason or None})
+
+    # ------------------------------------------------------------------ in-app notifications
+    @reads(list)
+    def get_notifications(self, unread_only=False, limit=50):
+        return self.api.get("/notifications", unread=unread_only or None, limit=limit)
+
+    @writes(_false)
+    def mark_notification_read(self, notification_id):
+        self.api.post(f"/notifications/{notification_id}/read")
+        return True
+
+    @writes(_false)
+    def mark_all_notifications_read(self):
+        self.api.post("/notifications/read-all")
+        return True
 
     # ------------------------------------------------------------------ calendar
     @writes(_none)

@@ -1433,6 +1433,28 @@ QCheckBox::indicator:disabled {
     background-color: ${SURFACE};
 }
 
+QRadioButton {
+    spacing: 10px;
+    padding: 4px 0;
+}
+
+QRadioButton::indicator {
+    width: 18px;
+    height: 18px;
+    border-radius: 10px;
+    border: 1px solid ${BORDER};
+    background-color: ${BACKGROUND};
+}
+
+QRadioButton::indicator:hover {
+    border: 1px solid ${ACCENT};
+}
+
+QRadioButton::indicator:checked {
+    border: 6px solid ${ACCENT};
+    background-color: ${SURFACE};
+}
+
 /* ===================== tables ===================== */
 QTableWidget, QTableView {
     font-size: ${TABLE_TEXT_SIZE}px;

@@ -7,10 +7,14 @@ from __future__ import annotations
 
 import html
 from dataclasses import dataclass
-from datetime import date, time
+from datetime import date, datetime, time
 
 LANGUAGES = ("en", "ar")
-TEMPLATES = ("task_urgent", "meeting_invite", "meeting_changed", "meeting_cancelled", "test")
+TEMPLATES = ("task_urgent", "meeting_invite", "meeting_changed", "meeting_cancelled", "meeting_request_new",
+             "meeting_request_accepted", "meeting_request_declined", "meeting_request_rescheduled",
+             "meeting_request_cancelled", "test")
+#: templates without an "Open" link (there is nothing left to open)
+NO_LINK = ("meeting_cancelled", "meeting_request_cancelled")
 
 _AR_DAYS = ("الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد")
 _AR_MONTHS = ("يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر",
@@ -31,6 +35,17 @@ TEXT = {
         "test.lead": "This is a test e-mail from Office Assistant. If you can read it, e-mail is set up correctly.",
         "label.task": "Task", "label.meeting": "Meeting", "label.due": "Due", "label.when": "When",
         "label.who": "From",
+        "label.topic": "Topic", "label.times": "Proposed times", "label.note": "Note", "label.reason": "Reason",
+        "meeting_request_new.subject": "Meeting request: {title}",
+        "meeting_request_new.lead": "{who} asked for a meeting with you.",
+        "meeting_request_accepted.subject": "Meeting accepted: {title}",
+        "meeting_request_accepted.lead": "{who} accepted the meeting. It is in your calendar.",
+        "meeting_request_declined.subject": "Meeting request declined: {title}",
+        "meeting_request_declined.lead": "{who} declined your meeting request.",
+        "meeting_request_rescheduled.subject": "Other times proposed: {title}",
+        "meeting_request_rescheduled.lead": "{who} proposed other times for your meeting request.",
+        "meeting_request_cancelled.subject": "Meeting request cancelled: {title}",
+        "meeting_request_cancelled.lead": "{who} cancelled the meeting request.",
         "no_deadline": "No deadline", "all_day": "All day",
         "open": "Open in Office Assistant",
         "app_hint": "You can also open the Office Assistant app on your computer.",
@@ -51,6 +66,17 @@ TEXT = {
         "test.lead": "هذه رسالة تجريبية من Office Assistant. إذا وصلتك فإعداد البريد يعمل بشكل صحيح.",
         "label.task": "المهمة", "label.meeting": "الاجتماع", "label.due": "موعد التسليم", "label.when": "الموعد",
         "label.who": "من",
+        "label.topic": "الموضوع", "label.times": "المواعيد المقترحة", "label.note": "ملاحظة", "label.reason": "السبب",
+        "meeting_request_new.subject": "طلب اجتماع: {title}",
+        "meeting_request_new.lead": "طلب {who} اجتماعاً معك.",
+        "meeting_request_accepted.subject": "تمت الموافقة على الاجتماع: {title}",
+        "meeting_request_accepted.lead": "وافق {who} على الاجتماع، وأُضيف إلى تقويمك.",
+        "meeting_request_declined.subject": "تم رفض طلب الاجتماع: {title}",
+        "meeting_request_declined.lead": "رفض {who} طلب الاجتماع.",
+        "meeting_request_rescheduled.subject": "مواعيد أخرى مقترحة: {title}",
+        "meeting_request_rescheduled.lead": "اقترح {who} مواعيد أخرى لطلب الاجتماع.",
+        "meeting_request_cancelled.subject": "تم إلغاء طلب الاجتماع: {title}",
+        "meeting_request_cancelled.lead": "ألغى {who} طلب الاجتماع.",
         "no_deadline": "بدون موعد نهائي", "all_day": "طوال اليوم",
         "open": "افتح في Office Assistant",
         "app_hint": "يمكنك أيضاً فتح تطبيق Office Assistant على حاسوبك.",
@@ -60,7 +86,9 @@ TEXT = {
 }
 
 PATHS = {"task_urgent": "/tasks", "meeting_invite": "/calendar", "meeting_changed": "/calendar",
-         "meeting_cancelled": "/calendar", "test": ""}
+         "meeting_cancelled": "/calendar", "test": "", "meeting_request_new": "/meetings",
+         "meeting_request_accepted": "/meetings", "meeting_request_declined": "/meetings",
+         "meeting_request_rescheduled": "/meetings", "meeting_request_cancelled": "/meetings"}
 
 
 @dataclass(frozen=True)
@@ -90,6 +118,14 @@ def format_when(day: str | None, start: str | None, end: str | None, language: s
     return f"{text} ({t['all_day']})" if empty_key == "all_day" else text
 
 
+def format_moment(value: str, language: str) -> str:
+    """An ISO date-time as the wall-clock time it was given in (the person's own time zone)."""
+    moment = datetime.fromisoformat(value)
+    clock = moment.strftime("%H:%M")
+    day = format_day(moment.date(), language)
+    return f"{day}، {clock}" if language == "ar" else f"{day}, {clock}"
+
+
 def render(template: str, language: str, payload: dict, recipient_name: str, link_base: str) -> Rendered:
     if template not in TEMPLATES:
         raise ValueError(f"unknown template {template!r}")
@@ -103,12 +139,21 @@ def render(template: str, language: str, payload: dict, recipient_name: str, lin
     if template == "task_urgent":
         rows = [(t["label.task"], title),
                 (t["label.due"], format_when(payload.get("date"), payload.get("time"), None, language, "no_deadline"))]
+    elif template.startswith("meeting_request_"):
+        times = " · ".join(format_moment(v, language) for v in payload.get("times") or [])
+        extra = {"meeting_request_new": [("label.times", times), ("label.note", payload.get("note"))],
+                 "meeting_request_accepted": [("label.when", format_moment(payload["when"], language)
+                                               if payload.get("when") else "")],
+                 "meeting_request_declined": [("label.reason", payload.get("reason"))],
+                 "meeting_request_rescheduled": [("label.times", times), ("label.note", payload.get("note"))],
+                 "meeting_request_cancelled": [("label.reason", payload.get("reason"))]}[template]
+        rows = [(t["label.topic"], title)] + [(t[key], str(value)[:1000]) for key, value in extra if value]
     elif template.startswith("meeting_"):
         rows = [(t["label.meeting"], title),
                 (t["label.when"], format_when(payload.get("date"), payload.get("start"), payload.get("end"),
                                               language, "all_day")),
                 (t["label.who"], who)]
-    link = link_base.rstrip("/") + PATHS[template] if template != "meeting_cancelled" else ""
+    link = link_base.rstrip("/") + PATHS[template] if template not in NO_LINK else ""
     footer = t["footer.urgent"] if template == "task_urgent" else (t["footer.optional"] if template != "test" else "")
 
     lines = [t["hello"].format(name=recipient_name), "", lead, ""]

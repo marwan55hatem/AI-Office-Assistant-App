@@ -43,7 +43,8 @@ def _message(response: httpx.Response) -> str:
     except ValueError:
         return response.reason_phrase or "Error"
     if isinstance(detail, list):              # validation errors: first readable one
-        return detail[0].get("msg", "Invalid input") if detail else "Invalid input"
+        text = detail[0].get("msg", "Invalid input") if detail else "Invalid input"
+        return text.removeprefix("Value error, ")
     return str(detail or response.reason_phrase or "Error")
 
 

@@ -47,12 +47,16 @@ class ShellNavigationMixin:
                 self.sidebar.set_item_enabled(key, online, "needs a connection")
 
     def _refresh_calendar_badge(self):
-        """Show how many events today (created or invited) on the Calendar item."""
+        """Show how many events today (created or invited) on the Calendar item, and how many
+        meeting requests wait for this user on the Meetings item."""
         if self.db is None or self.user.get("id") is None:
             return
         try:
             count = len(self.db.get_today_events(self.user["id"]))
+            waiting = self.db.count_meeting_requests_waiting() if "meetings" in self._page_index else 0
         except Exception:
-            logger.warning("Updating the calendar badge failed", exc_info=True)
+            logger.warning("Updating the badges failed", exc_info=True)
             return
         self.sidebar.set_badge("calendar", count)
+        if "meetings" in self._page_index:
+            self.sidebar.set_badge("meetings", waiting)

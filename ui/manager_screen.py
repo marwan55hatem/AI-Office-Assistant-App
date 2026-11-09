@@ -73,6 +73,7 @@ EVENT_COLOUR_NAMES = {"focus": "SUCCESS", "away": "DANGER", "distraction": "WARN
 MANAGER_ITEMS = [
     ("item", "home", "\U0001F3E0", "Home"),
     ("item", "calendar", "\U0001F4C5", "Calendar"),
+    ("item", "meetings", "\U0001F91D", "Meetings"),
     ("item", "employees", "🧑", "Employees"),
     ("item", "sessions", "\U0001F552", "Sessions"),
     ("item", "tasks", "\u2705", "Tasks"),
@@ -1058,6 +1059,9 @@ class ManagerScreen(ShellNavigationMixin, QWidget):
         self.settings_page = SettingsScreen(user=self.user, db=self.db)
         self.settings_page.profile_updated.connect(self._on_profile_updated)
         self.calendar_page = CalendarScreen(user=self.user, db=self.db)
+        from ui.meetings_screen import MeetingsScreen
+        self.meetings_page = MeetingsScreen(user={**self.user, "role": "manager"}, db=self.db)
+        self.meetings_page.changed.connect(self._refresh_calendar_badge)
 
         self.employees_page.employees_changed.connect(self.tasks_page.refresh)
         self.home_page.go_to_employees.connect(
@@ -1069,6 +1073,7 @@ class ManagerScreen(ShellNavigationMixin, QWidget):
         for key, page in (
             ("home", self.home_page),
             ("calendar", self.calendar_page),
+            ("meetings", self.meetings_page),
             ("employees", self.employees_page),
             ("sessions", self.sessions_page),
             ("tasks", self.tasks_page),

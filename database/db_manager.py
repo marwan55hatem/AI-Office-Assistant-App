@@ -366,6 +366,39 @@ class DatabaseManager:
         )
         return [self._public(user) for user in self._fetch_all(cursor)]
 
+    # -- meeting requests and in-app notifications live on the online server only --
+    OFFLINE_ONLY = "Meeting requests need the online server"
+
+    def get_meeting_requests(self, status=None):
+        return []
+
+    def count_meeting_requests_waiting(self):
+        return 0
+
+    def request_meeting(self, topic, proposed_times, note=None, duration_minutes=30):
+        return False, self.OFFLINE_ONLY
+
+    def accept_meeting_request(self, request_id, time, duration_minutes=None):
+        return False, self.OFFLINE_ONLY
+
+    def decline_meeting_request(self, request_id, reason):
+        return False, self.OFFLINE_ONLY
+
+    def reschedule_meeting_request(self, request_id, proposed_times, note=None):
+        return False, self.OFFLINE_ONLY
+
+    def cancel_meeting_request(self, request_id, reason=None):
+        return False, self.OFFLINE_ONLY
+
+    def get_notifications(self, unread_only=False, limit=50):
+        return []
+
+    def mark_notification_read(self, notification_id):
+        return False
+
+    def mark_all_notifications_read(self):
+        return False
+
     def email_preferences(self):
         """E-mail notifications come from the online server; the local database sends none."""
         return None

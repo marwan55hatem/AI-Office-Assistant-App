@@ -88,6 +88,16 @@ class CalendarRepo(_Repository):
     )
 
 
+class MeetingRepo(_Repository):
+    """Meeting requests between an employee and the manager, and in-app notifications (online only)."""
+
+    METHODS = (
+        "get_meeting_requests", "count_meeting_requests_waiting", "request_meeting", "accept_meeting_request",
+        "decline_meeting_request", "reschedule_meeting_request", "cancel_meeting_request",
+        "get_notifications", "mark_notification_read", "mark_all_notifications_read",
+    )
+
+
 class ChatRepo(_Repository):
     """AI Chat conversations and their messages."""
 
@@ -119,6 +129,7 @@ REPOSITORIES = {
     "activity": ActivityRepo,
     "tasks": TaskRepo,
     "calendar": CalendarRepo,
+    "meetings": MeetingRepo,
     "chats": ChatRepo,
     "knowledge": KnowledgeRepo,
     "admin": AdminRepo,

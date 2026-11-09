@@ -214,3 +214,46 @@ Desktop 218 passed (3 new). Live run against a real server with its own backgrou
 server log contained no address or title.
 
 **Real test e-mail (2026-11-09): passed.** Through Resend (sandbox sender `onboarding@resend.dev`) to the account owner's address with `scripts/send_test_email.py`: an English urgent-task e-mail and an Arabic meeting invite, both accepted by Resend (message ids recorded in the run). The key stayed in `backend/.env`; neither it nor the full address was printed.
+
+## Phase 6 — Meeting requests
+
+**Lifecycle** (`/meeting-requests`, the server decides what is allowed):
+
+| Step | Who | New status |
+|---|---|---|
+| Ask: topic, short note, 1-3 proposed times, length (15-240 min) | employee | pending |
+| Accept one proposed time → a calendar event for both | manager | accepted |
+| Decline, with a reason (required) | manager | declined (final) |
+| Propose other times (1-3, optional note) | manager | rescheduled |
+| Pick one of the manager's times → calendar event | employee | accepted |
+| Cancel an open or accepted request (the event is removed) | employee | cancelled (final) |
+| Cancel an accepted meeting | manager | cancelled (final) |
+
+- Times are ISO date-times with the person's UTC offset; the same instant written in another offset
+  counts as the same time. The calendar event uses the wall-clock time in that offset; a meeting that
+  runs past midnight gets no end time. Times must be in the future, different, and within a year.
+- The request row is locked while it changes (`FOR UPDATE`), so a second answer gets 409 instead of
+  two bookings. Employees see only their own requests (404 for anyone else's), managers the company's.
+- `GET /meeting-requests/waiting-count`: what waits for *you* (pending for a manager, rescheduled for an
+  employee), shown as the Meetings badge.
+- **Notifications**: every step notifies the other side in the app (`/notifications`: list, unread
+  count, mark read / all read; private to their owner) and by e-mail (5 new English/Arabic templates;
+  optional e-mails, so the "meeting e-mails" switch applies). A request to a named manager notifies
+  only that manager, otherwise every active manager.
+- Migration `0005_phase6_meeting_requests`: `duration_minutes`, `reply_note`, indexes for the status
+  lists and unread notifications (the tables themselves were created in Phase 1).
+
+**Desktop**: a **Meetings** page for both roles (sidebar, with a badge of what waits for you).
+Employees fill in the request form (1-3 date-time pickers) and follow their requests; managers
+accept a selected time, propose other times (dialog), or decline (reason dialog); either side can
+cancel. The tray shows each new server notification once. The page is online-only (it explains this
+when signed in to the local database). Radio buttons got a visible theme style. Fixed in passing: the
+30-second auto-refresh no longer wipes the message of the last action.
+
+**Tests**: backend 190 passed (1 skipped), 18 new: both full lifecycles, time zones, past midnight,
+final states (409), every bad-time case, who may do what, isolation (another employee / company),
+filters, a named manager, notifications privacy and read state, and the e-mails of each step.
+Desktop 230 passed (12 new: both roles' buttons per state, dialogs, server refusals, offline, markup
+escaping, the client's ISO times, tray notifications). Real-window run of the whole flow for both roles
+against a live server with its own e-mail worker: 22/22 checks, 0 warnings. Screenshots:
+`screenshots_redesign/cloud/phase6_*` (manager and employee, light and dark).

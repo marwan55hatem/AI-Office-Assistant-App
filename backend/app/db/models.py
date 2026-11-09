@@ -250,11 +250,17 @@ class MeetingRequest(Base):
     calendar_event_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _created()
+    duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=30, server_default="30")
+    #: the manager's note when proposing other times
+    reply_note: Mapped[str | None] = mapped_column(String(1000))
     __table_args__ = (
         CheckConstraint("status IN ('pending', 'accepted', 'declined', 'rescheduled', 'cancelled')",
                         name="meeting_status_valid"),
+        CheckConstraint("duration_minutes BETWEEN 15 AND 240", name="meeting_duration_valid"),
         _user_fk("requested_by", "fk_meeting_requests_requested_by"),
         _user_fk("manager_id", "fk_meeting_requests_manager", ondelete="SET NULL (manager_id)"),
+        Index("ix_meeting_requests_company_status", "company_id", "status"),
+        Index("ix_meeting_requests_requested_by", "company_id", "requested_by"),
     )
 
 
@@ -288,7 +294,8 @@ class Notification(Base):
     link: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = _created()
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    __table_args__ = (_user_fk("user_id", "fk_notifications_user"),)
+    __table_args__ = (_user_fk("user_id", "fk_notifications_user"),
+                      Index("ix_notifications_user_unread", "company_id", "user_id", "read_at"))
 
 
 class EmailLog(Base):

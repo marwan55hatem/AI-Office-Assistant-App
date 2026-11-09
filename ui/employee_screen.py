@@ -63,6 +63,7 @@ SCREEN_BAR_WIDTH = 150
 EMPLOYEE_ITEMS = [
     ("item", "session", "⏱️", "Session"),
     ("item", "calendar", "\U0001F4C5", "Calendar"),
+    ("item", "meetings", "\U0001F91D", "Meetings"),
     ("item", "todo", "\U0001F4CB", "To Do"),
     ("item", "ai_helper", "\U0001F916", "AI Helper"),
     ("item", "ai_chat", "\U0001F4AC", "AI Chat"),
@@ -825,12 +826,16 @@ class EmployeeScreen(ShellNavigationMixin, QWidget):
         self.settings_page = SettingsScreen(user=self.user, db=self.db)
         self.settings_page.profile_updated.connect(self._on_profile_updated)
         self.calendar_page = CalendarScreen(user=self.user, db=self.db)
+        from ui.meetings_screen import MeetingsScreen
+        self.meetings_page = MeetingsScreen(user={**self.user, "role": "employee"}, db=self.db)
+        self.meetings_page.changed.connect(self._refresh_calendar_badge)
 
         self.stack = QStackedWidget()
         self._page_index = {}
         for key, page in (
             ("session", self.session_page),
             ("calendar", self.calendar_page),
+            ("meetings", self.meetings_page),
             ("todo", self.todo_page),
             ("ai_helper", self.ai_helper_page),
             ("ai_chat", self.ai_chat_page),

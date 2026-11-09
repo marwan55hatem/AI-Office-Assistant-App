@@ -1,4 +1,5 @@
-"""System-tray notifications for today's calendar events and task deadlines.
+"""System-tray notifications for today's calendar events, task deadlines and the
+server's in-app notifications (meeting requests and their answers).
 
 :class:`TrayNotifier` lives for the whole application (it is a child of the root
 window).  It starts when somebody logs in, checks the database every minute and
@@ -163,8 +164,25 @@ class TrayNotifier(QObject):
             self.notified.add(key)
             fresh.append((title, message))
 
+        fresh.extend(self._server_notifications())
         self._queue.extend(fresh)
         self._flush()
+        return fresh
+
+    def _server_notifications(self):
+        """Unread notifications from the server (online only), each shown once."""
+        try:
+            rows = self.db.get_notifications(unread_only=True)
+        except Exception:
+            logger.warning("reading notifications failed", exc_info=True)
+            return []
+        fresh = []
+        for row in reversed(rows):                       # oldest first
+            key = ("server", row["id"])
+            if key in self.notified:
+                continue
+            self.notified.add(key)
+            fresh.append((row["title"], row.get("body") or ""))
         return fresh
 
     # ------------------------------------------------------------------ #
