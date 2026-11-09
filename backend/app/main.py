@@ -7,7 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.db.session import check_app_role
-from app.routers import ai, auth, calendar, content, people, reports, sessions, stats, tasks
+from app.routers import ai, auth, calendar, content, emails, people, reports, sessions, stats, tasks
+from app.services.email.providers import get_provider
+from app.services.email.worker import EmailWorker
 
 logger = logging.getLogger("office.api")
 
@@ -25,7 +27,16 @@ def _check_database_role() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _check_database_role()
+    settings = get_settings()
+    provider = get_provider(settings)                 # fails early on a bad EMAIL_PROVIDER
+    logger.info("e-mail provider: %s", provider.name)
+    worker = None
+    if settings.email_worker_enabled and settings.environment != "test":
+        worker = EmailWorker(settings.email_poll_seconds)
+        worker.start()
     yield
+    if worker is not None:
+        worker.stop()
 
 
 def create_app() -> FastAPI:
@@ -38,7 +49,7 @@ def create_app() -> FastAPI:
                        allow_headers=["Authorization", "Content-Type"])
     app.include_router(auth.router)
     app.include_router(people.router)
-    for module in (sessions, stats, tasks, calendar, content, ai, reports):
+    for module in (sessions, stats, tasks, calendar, content, ai, reports, emails):
         app.include_router(module.router)
 
     @app.get("/health", tags=["health"])

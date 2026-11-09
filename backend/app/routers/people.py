@@ -14,7 +14,8 @@ from app.core.config import get_settings
 from app.core.deps import CurrentManager, CurrentUser, invalidate_reports_after_write
 from app.db.models import Company, User
 from app.repositories.tenant import CompanyRepository, InviteRepository, RefreshTokenRepository, UserRepository
-from app.schemas.auth import CompanyOut, InviteCreate, InviteOut, ProfileUpdate, UserOut, UserStatusChange
+from app.schemas.auth import (CompanyOut, InviteCreate, InviteOut, PreferencesUpdate, ProfileUpdate, UserOut,
+                              UserStatusChange)
 from app.services.auth_service import _join_code
 
 router = APIRouter(tags=["people"], dependencies=[Depends(invalidate_reports_after_write)])
@@ -37,6 +38,13 @@ def list_users(principal: CurrentManager,
 def update_profile(body: ProfileUpdate, principal: CurrentUser):
     """Change your own display name (the e-mail address is the login and stays fixed)."""
     return UserRepository(principal.session, principal.company_id).update(principal.user, full_name=body.full_name)
+
+
+@router.patch("/users/me/preferences", response_model=UserOut)
+def update_preferences(body: PreferencesUpdate, principal: CurrentUser):
+    """Your e-mail settings: optional (meeting) e-mails on/off, and the e-mail language."""
+    changes = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    return UserRepository(principal.session, principal.company_id).update(principal.user, **changes)
 
 
 @router.get("/users/{user_id}", response_model=UserOut)

@@ -254,6 +254,30 @@ class RemoteDatabase:
         self.api.load_me()
         return True, "Profile updated"
 
+    def email_preferences(self):
+        """``{"email_notifications": bool, "language": "en"|"ar"}`` of the signed-in user, or None."""
+        user = (self.api.me or {}).get("user")
+        if not user:
+            return None
+        return {"email_notifications": bool(user.get("email_notifications", True)),
+                "language": user.get("language") or "en"}
+
+    @writes(_pair)
+    def set_email_preferences(self, *, email_notifications=None, language=None):
+        """Optional (meeting) e-mails on/off and the e-mail language; urgent tasks are always e-mailed."""
+        body = {}
+        if email_notifications is not None:
+            body["email_notifications"] = bool(email_notifications)
+        if language is not None:
+            if language not in ("en", "ar"):
+                return False, "Unknown language"
+            body["language"] = language
+        if not body:
+            return False, "Nothing to update"
+        self.api.patch("/users/me/preferences", body)
+        self.api.load_me()
+        return True, "E-mail settings saved"
+
     def update_user_password(self, user_id, new_password):
         return False, "Enter your current password to change it"
 

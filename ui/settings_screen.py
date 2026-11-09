@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import (
     QApplication,
     QButtonGroup,
     QCheckBox,
+    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -79,6 +80,8 @@ class SettingsScreen(QWidget):
         body.addWidget(self._build_password_card())
         body.addWidget(self._build_appearance_card())
         body.addWidget(self._build_ai_card())
+        self.email_card = self._build_email_card()
+        body.addWidget(self.email_card)
         body.addWidget(self._build_about_card())
         body.addStretch(1)
 
@@ -345,6 +348,62 @@ class SettingsScreen(QWidget):
         preferences.set_use_ai_model(checked)
         self._refresh_ai_card()
 
+    # ------------------------------ e-mail ----------------------------- #
+    EMAIL_LANGUAGES = (("English", "en"), ("العربية (Arabic)", "ar"))
+
+    def _build_email_card(self):
+        card, layout = make_card(
+            "✉️  Notifications",
+            "E-mails from your company's Office Assistant server to your sign-in address.")
+        self.email_meetings_check = QCheckBox("E-mail me about meetings (invites, changes and cancellations)")
+        self.email_meetings_check.setCursor(Qt.PointingHandCursor)
+        self.email_meetings_check.toggled.connect(self._on_email_toggled)
+        layout.addWidget(self.email_meetings_check)
+
+        urgent = QLabel("Urgent tasks that a manager gives you are always e-mailed.")
+        urgent.setObjectName("MutedLabel")
+        urgent.setWordWrap(True)
+        layout.addWidget(urgent)
+
+        row = QHBoxLayout()
+        row.addWidget(self._caption("E-mail language"))
+        self.email_language_combo = QComboBox()
+        for label, code in self.EMAIL_LANGUAGES:
+            self.email_language_combo.addItem(label, code)
+        self.email_language_combo.currentIndexChanged.connect(self._on_email_language)
+        row.addWidget(self.email_language_combo)
+        row.addStretch(1)
+        layout.addLayout(row)
+
+        self.email_status = self._status_label()
+        layout.addWidget(self.email_status)
+        return card
+
+    def _refresh_email_card(self):
+        """Shown only when signed in online (the e-mails come from the server)."""
+        prefs = self.db.email_preferences() if self.db is not None else None
+        self.email_card.setVisible(prefs is not None)
+        if prefs is None:
+            return
+        for widget in (self.email_meetings_check, self.email_language_combo):
+            widget.blockSignals(True)
+        self.email_meetings_check.setChecked(prefs["email_notifications"])
+        self.email_language_combo.setCurrentIndex(max(self.email_language_combo.findData(prefs["language"]), 0))
+        for widget in (self.email_meetings_check, self.email_language_combo):
+            widget.blockSignals(False)
+
+    def _save_email(self, **change):
+        ok, message = self.db.set_email_preferences(**change)
+        self._show_status(self.email_status, message, ok)
+        if not ok:
+            self._refresh_email_card()              # show what the server really has
+
+    def _on_email_toggled(self, checked):
+        self._save_email(email_notifications=checked)
+
+    def _on_email_language(self, _index):
+        self._save_email(language=self.email_language_combo.currentData())
+
     def _swatch(self, colour, caption):
         holder = QWidget()
         row = QHBoxLayout(holder)
@@ -451,6 +510,8 @@ class SettingsScreen(QWidget):
 
         self.profile_status.setVisible(False)
         self.password_status.setVisible(False)
+        self._refresh_email_card()
+        self.email_status.setVisible(False)
         self._sync_theme_buttons()
 
     # ------------------------------------------------------------------ #

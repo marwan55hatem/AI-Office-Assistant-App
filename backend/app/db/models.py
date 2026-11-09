@@ -61,9 +61,14 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = _created()
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: optional e-mails (meetings); urgent-task e-mails are always sent
+    email_notifications: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    #: language of the e-mails this user receives
+    language: Mapped[str] = mapped_column(String(2), nullable=False, default="en", server_default="en")
 
     __table_args__ = (
         CheckConstraint("role IN ('manager', 'employee')", name="role_valid"),
+        CheckConstraint("language IN ('en', 'ar')", name="language_valid"),
         CheckConstraint("status IN ('pending', 'active', 'disabled')", name="status_valid"),
         UniqueConstraint("company_id", "id", name="uq_users_company_id"),
         # one account per e-mail address across the whole service
@@ -287,7 +292,10 @@ class Notification(Base):
 
 
 class EmailLog(Base):
-    """One row per e-mail send attempt. The address and the body are not stored."""
+    """One row per e-mail. It is also the send queue: the background worker sends the
+    ``queued`` rows that are due. The address and the body are never stored; ``payload``
+    holds only what the template needs (title, time, who) until the e-mail is sent or
+    given up, then it is emptied."""
     __tablename__ = "email_log"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     company_id: Mapped[uuid.UUID] = _company_id()
@@ -299,9 +307,14 @@ class EmailLog(Base):
     error: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = _created()
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
+    #: urgent e-mails ignore the user's "optional e-mails" switch
+    urgent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
         CheckConstraint("status IN ('queued', 'sent', 'failed', 'skipped')", name="email_status_valid"),
         _user_fk("user_id", "fk_email_log_user", ondelete="SET NULL (user_id)"),
+        Index("ix_email_log_due", "status", "next_attempt_at"),
     )
 
 

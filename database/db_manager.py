@@ -366,6 +366,13 @@ class DatabaseManager:
         )
         return [self._public(user) for user in self._fetch_all(cursor)]
 
+    def email_preferences(self):
+        """E-mail notifications come from the online server; the local database sends none."""
+        return None
+
+    def set_email_preferences(self, *, email_notifications=None, language=None):
+        return False, "E-mail notifications need the online server"
+
     def update_user_profile(self, user_id: int, *, full_name=None, username=None):
         """Update only the provided fields. Returns ``(ok, message)``."""
         updates = []

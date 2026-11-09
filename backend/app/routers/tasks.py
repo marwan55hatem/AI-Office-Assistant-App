@@ -4,6 +4,7 @@
 * Managers may create a task for any employee of the company (``assigned_by`` is
   set to them) and see or change any task of the company.
 * A task can be ticked, re-dated or deleted by its owner or by a manager.
+* An urgent task given by a manager is e-mailed to the employee (always; see Phase 5).
 """
 import uuid
 from datetime import UTC, date, datetime, time
@@ -16,6 +17,7 @@ from app.core.deps import CurrentUser, invalidate_reports_after_write
 from app.db.models import Task
 from app.repositories.tenant import TaskRepository
 from app.routers.common import NOT_FOUND, target_user
+from app.services.email.outbox import queue_urgent_task
 
 router = APIRouter(prefix="/tasks", tags=["tasks"], dependencies=[Depends(invalidate_reports_after_write)])
 
@@ -78,10 +80,12 @@ def list_tasks(principal: CurrentUser, user_id: uuid.UUID | None = None,
 def create_task(body: TaskIn, principal: CurrentUser):
     owner = target_user(principal, body.user_id)
     assigned_by = principal.user.id if owner.id != principal.user.id else None
-    return TaskRepository(principal.session, principal.company_id).add(
+    task = TaskRepository(principal.session, principal.company_id).add(
         user_id=owner.id, assigned_by=assigned_by, title=body.title, priority=body.priority,
         description=body.description, deadline_date=body.deadline_date,
         deadline_time=body.deadline_time if body.deadline_date else None)
+    queue_urgent_task(principal.session, principal.company_id, task, principal.user)
+    return task
 
 
 def _editable(principal, task_id: uuid.UUID) -> Task:

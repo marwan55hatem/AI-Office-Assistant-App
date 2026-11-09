@@ -65,6 +65,8 @@ class UserOut(BaseModel):
     status: str
     created_at: datetime
     last_login_at: datetime | None = None
+    email_notifications: bool = True
+    language: str = "en"
 
 
 class CompanyOut(BaseModel):
@@ -102,6 +104,12 @@ class UserStatusChange(Strict):
 
 class ProfileUpdate(Strict):
     full_name: Name
+
+
+class PreferencesUpdate(Strict):
+    #: optional e-mails (meetings); urgent-task e-mails are always sent
+    email_notifications: bool | None = None
+    language: Literal["en", "ar"] | None = None
 
 
 class PasswordChange(Strict):

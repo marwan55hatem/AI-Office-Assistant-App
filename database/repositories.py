@@ -41,7 +41,7 @@ class UserRepo(_Repository):
     METHODS = (
         "get_user", "get_user_by_id", "get_all_employees", "get_all_users", "get_user_status",
         "sign_in", "restore_sign_in", "sign_out", "change_password", "join",
-        "update_user_profile", "update_user_password", "update_user",
+        "update_user_profile", "update_user_password", "update_user", "email_preferences", "set_email_preferences",
         "create_signup_request", "get_pending_users", "approve_user", "reject_user",
         "delete_user_cascade", "reset_employee_passwords",
         "username_taken", "create_user", "count_user_related_rows",

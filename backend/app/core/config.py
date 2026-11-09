@@ -47,8 +47,42 @@ class Settings(BaseSettings):
     #: development only: answer with a fixed text instead of calling Groq (ignored in production)
     ai_fake_model: bool = False
 
+    # -- e-mail. Keys live only in the server's environment.
+    #: off | console (log only, development) | fake (tests) | smtp | resend | sendgrid
+    email_provider: str = "console"
+    email_from: str = "Office Assistant <no-reply@example.com>"
+    email_reply_to: str | None = None
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: SecretStr | None = None
+    smtp_starttls: bool = True
+    resend_api_key: SecretStr | None = None
+    sendgrid_api_key: SecretStr | None = None
+    #: where the "Open" link in an e-mail points (the website; the desktop app is named too)
+    app_link_url: str = "http://localhost:3000"
+    #: run the background sender inside the API process
+    email_worker_enabled: bool = True
+    email_poll_seconds: float = 10.0
+    email_max_attempts: int = 5
+
     #: Development only: allow an app role that bypasses RLS (never in production).
     allow_rls_bypass: bool = False
+
+    @field_validator("email_provider")
+    @classmethod
+    def _known_provider(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in {"off", "console", "fake", "smtp", "resend", "sendgrid"}:
+            raise ValueError("email_provider must be off, console, fake, smtp, resend or sendgrid")
+        return value
+
+    @field_validator("app_link_url")
+    @classmethod
+    def _http_link(cls, value: str) -> str:
+        if not value.startswith(("https://", "http://")):
+            raise ValueError("app_link_url must start with https:// or http://")
+        return value.rstrip("/")
 
     @field_validator("environment")
     @classmethod

@@ -35,6 +35,10 @@ os.environ.update({
     # real key: environment variables win over .env, and an empty key means "no model set up".
     "GROQ_API_KEY": "",
     "AI_FAKE_MODEL": "0",
+    # e-mail goes to an in-memory fake provider; the tests run the sender themselves
+    "EMAIL_PROVIDER": "fake",
+    "EMAIL_WORKER_ENABLED": "0",
+    "APP_LINK_URL": "https://app.example.test",
 })
 
 

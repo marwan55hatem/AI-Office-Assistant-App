@@ -3,6 +3,9 @@
 Everyone sees the events they created or are invited to (as before: a manager does not
 see another manager's events unless invited). Only managers create, change and delete
 events and choose attendees.
+
+Attendees are e-mailed (optional e-mails, see Phase 5) when they are invited, when the
+title or time of the meeting changes, and when it is cancelled or they are removed.
 """
 import uuid
 from datetime import UTC, date, datetime, time
@@ -16,6 +19,10 @@ from app.core.deps import CurrentManager, CurrentUser
 from app.db.models import CalendarAttendee, CalendarEvent, User
 from app.repositories.tenant import CalendarEventRepository, UserRepository
 from app.routers.common import NOT_FOUND
+from app.services.email.outbox import queue_meeting
+
+#: changes that attendees are told about (a new description alone is not e-mailed)
+NOTIFY_FIELDS = ("title", "event_date", "start_time", "end_time")
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
@@ -98,6 +105,11 @@ def _names(principal):
     return {u.id: u for u in UserRepository(principal.session, principal.company_id).list()}
 
 
+def _attendee_ids(principal, event_id) -> set:
+    return set(principal.session.scalars(select(CalendarAttendee.user_id).where(
+        CalendarAttendee.company_id == principal.company_id, CalendarAttendee.event_id == event_id)))
+
+
 def _visible_query(principal):
     invited = select(CalendarAttendee.event_id).where(CalendarAttendee.company_id == principal.company_id,
                                                       CalendarAttendee.user_id == principal.user.id)
@@ -152,7 +164,11 @@ def update_event(event_id: uuid.UUID, body: EventPatch, principal: CurrentManage
     for required in ("title", "event_date"):
         if required in changes and changes[required] is None:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"{required} cannot be empty")
+    changed = any(field in changes and changes[field] != getattr(event, field) for field in NOTIFY_FIELDS)
     events.update(event, updated_at=datetime.now(UTC), **changes)
+    if changed:
+        queue_meeting(principal.session, principal.company_id, event, "meeting_changed",
+                      _attendee_ids(principal, event.id), principal.user)
     return _out(principal, event, _names(principal), _counts(principal, [event.id]))
 
 
@@ -162,16 +178,23 @@ def delete_event(event_id: uuid.UUID, principal: CurrentManager):
     event = events.get(event_id)
     if event is None:
         raise NOT_FOUND
+    queue_meeting(principal.session, principal.company_id, event, "meeting_cancelled",
+                  _attendee_ids(principal, event.id), principal.user)
     events.delete(event)
 
 
 @router.put("/{event_id}/attendees", response_model=list[Attendee])
 def set_attendees(event_id: uuid.UUID, body: AttendeesIn, principal: CurrentManager):
     """Replace the attendee list (a snapshot: people added later are not invited)."""
-    if CalendarEventRepository(principal.session, principal.company_id).get(event_id) is None:
+    event = CalendarEventRepository(principal.session, principal.company_id).get(event_id)
+    if event is None:
         raise NOT_FOUND
     users = UserRepository(principal.session, principal.company_id)
     wanted = {uid for uid in body.user_ids if users.get(uid) is not None}
+    before = _attendee_ids(principal, event_id)
+    queue_meeting(principal.session, principal.company_id, event, "meeting_invite", wanted - before, principal.user)
+    queue_meeting(principal.session, principal.company_id, event, "meeting_cancelled", before - wanted,
+                  principal.user)
     principal.session.execute(delete(CalendarAttendee).where(
         CalendarAttendee.company_id == principal.company_id, CalendarAttendee.event_id == event_id))
     for user_id in sorted(wanted):

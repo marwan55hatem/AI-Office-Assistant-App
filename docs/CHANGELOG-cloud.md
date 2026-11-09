@@ -171,3 +171,46 @@ dependency) and follow the light/dark theme. Screenshots: `screenshots_redesign/
 **Tests**: backend 130 passed (1 skipped), 28 new report tests with seeded data for each metric plus
 isolation sweeps; desktop 215 passed (19 app-usage + 14 charts/export/page tests). Real-window run against
 a live server with 12 seeded employees: 18/18 checks, 0 warnings.
+
+## Phase 5 — E-mail notifications
+
+**What is e-mailed**
+- An **urgent task** a manager gives an employee: always sent (it cannot be turned off).
+- **Meetings**: an invite when someone is added, a change when the title, date or time changes (a new
+  description alone is not e-mailed), and a cancellation when the meeting is deleted or the person is
+  removed. These are optional: each user can turn them off in Settings → Notifications. The person who
+  made the change is never e-mailed about it.
+- Each e-mail has the title, the time, who did it, and a link to the website (`APP_LINK_URL` + `/tasks` or
+  `/calendar`), plus a note that the desktop app opens it too. HTML and plain text, in **English or Arabic**
+  (right-to-left), chosen by the user (Settings → E-mail language).
+
+**How it works**
+- Providers behind one interface, chosen by `EMAIL_PROVIDER`: `smtp`, `resend`, `sendgrid`, `console`
+  (development: logs a masked address only), `off`, `fake` (tests; refused in production). Keys only in
+  the server environment (`backend/.env.example` lists them).
+- `email_log` is the queue. The row is written in the same transaction as the task or meeting change, so
+  nothing is queued for a change that was rolled back. A background worker in the API process sends due
+  rows every `EMAIL_POLL_SECONDS` (10 s), one per transaction with `FOR UPDATE SKIP LOCKED` (no double
+  send between workers). Retries after 1 min, 5 min, 30 min, 2 h, up to `EMAIL_MAX_ATTEMPTS` (5); refused
+  addresses / bad keys fail at once. Resend gets an idempotency key so a repeat after a crash is dropped.
+- Every decision is in the log: sent, failed, or skipped (turned off by the user, user no longer active,
+  e-mail switched off on the server). The address and the body are never stored; the template data
+  (title, time, who) is kept only until the e-mail is done, then emptied. Error texts are written by the
+  server (status codes, kinds), never copied from the provider, which can echo the address.
+- The worker sees one company at a time (RLS): a new `SECURITY DEFINER` function `email_due_companies`
+  returns only the ids of companies with e-mail due.
+- New: migration `0004_phase5_email` (user `email_notifications`, `language`; log `payload`, `urgent`,
+  `next_attempt_at`), `PATCH /users/me/preferences`, `GET /email-log` (managers, no addresses),
+  `scripts/send_test_email.py` for the real test e-mail.
+
+**Desktop**: Settings has a Notifications card (meeting e-mails on/off, e-mail language), shown only when
+signed in online.
+
+**Tests**: backend 162 passed (1 skipped), 32 new: each trigger, opt-out (also for e-mails already
+queued), disabled users, Arabic, retries and backoff, permanent failure, giving up, an unexpected error
+not stopping the round, two companies in one round, the log endpoint (managers only, no addresses, per
+company), every template × language (escaping), and each provider against a fake HTTP/SMTP server.
+Desktop 218 passed (3 new). Live run against a real server with its own background worker: 6/6, and the
+server log contained no address or title.
+
+**Still open**: the one real test e-mail to a sandbox address needs a provider key (see the Phase 5 report).

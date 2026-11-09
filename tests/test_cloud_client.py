@@ -31,6 +31,7 @@ class FakeServer:
         self.calls = []
         self.access = "access-1"
         self.sync_batches = []
+        self.me = json.loads(json.dumps(ME))
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         if self.down:
@@ -51,7 +52,12 @@ class FakeServer:
         if request.headers.get("Authorization") != f"Bearer {self.access}":
             return httpx.Response(401, json={"detail": "Not signed in"})
         if path == "/auth/me":
-            return httpx.Response(200, json=ME)
+            return httpx.Response(200, json=self.me)
+        if path == "/users/me/preferences" and method == "PATCH":
+            if body.get("language") not in (None, "en", "ar"):
+                return httpx.Response(422, json={"detail": "language must be en or ar"})
+            self.me["user"].update(body)
+            return httpx.Response(200, json=self.me["user"])
         if path == "/sessions/sync":
             self.sync_batches.append(body)
             return httpx.Response(200, json={"sessions": len(body["sessions"]), "events": len(body["events"])})
@@ -390,4 +396,42 @@ def test_settings_say_what_is_sent_to_the_model(qt_app, db, marwan):
     screen = SettingsScreen(user=marwan, db=db)
     text = screen.ai_privacy_label.text()
     assert "Never sent" in text and "tasks" in text and "Groq" in text and "30 days" in text
+    screen.deleteLater()
+
+
+# ---------------------------------------------------------------- e-mail settings (Phase 5)
+def test_email_preferences_round_trip(server, remote):
+    remote.api.login("w@corp.com", "right password")
+    assert remote.email_preferences() == {"email_notifications": True, "language": "en"}
+    assert remote.set_email_preferences(email_notifications=False, language="ar") == (True, "E-mail settings saved")
+    assert ("PATCH", "/users/me/preferences", {"email_notifications": False, "language": "ar"}) in server.calls
+    assert remote.email_preferences() == {"email_notifications": False, "language": "ar"}
+    assert remote.set_email_preferences(language="fr") == (False, "Unknown language")
+    assert remote.set_email_preferences() == (False, "Nothing to update")
+    server.down = True
+    ok, message = remote.set_email_preferences(email_notifications=True)
+    assert not ok and "connection" in message.lower()
+
+
+def test_settings_email_card(qt_app, server, remote):
+    from ui.settings_screen import SettingsScreen
+
+    remote.api.login("w@corp.com", "right password")
+    screen = SettingsScreen(user=remote.me, db=remote)
+    assert not screen.email_card.isHidden() and screen.email_meetings_check.isChecked()
+    screen.email_meetings_check.setChecked(False)
+    assert server.me["user"]["email_notifications"] is False and "saved" in screen.email_status.text()
+    screen.email_language_combo.setCurrentIndex(screen.email_language_combo.findData("ar"))
+    assert server.me["user"]["language"] == "ar"
+    server.down = True
+    screen.email_meetings_check.setChecked(True)                   # fails: the box goes back to the saved value
+    assert not screen.email_meetings_check.isChecked() or "connection" in screen.email_status.text().lower()
+    screen.deleteLater()
+
+
+def test_settings_email_card_is_hidden_offline_mode(qt_app, db, marwan):
+    from ui.settings_screen import SettingsScreen
+
+    screen = SettingsScreen(user=marwan, db=db)                      # the local database sends no e-mail
+    assert screen.email_card.isHidden()
     screen.deleteLater()
