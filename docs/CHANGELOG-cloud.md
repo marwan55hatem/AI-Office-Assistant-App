@@ -213,4 +213,4 @@ company), every template × language (escaping), and each provider against a fak
 Desktop 218 passed (3 new). Live run against a real server with its own background worker: 6/6, and the
 server log contained no address or title.
 
-**Still open**: the one real test e-mail to a sandbox address needs a provider key (see the Phase 5 report).
+**Real test e-mail (2026-11-09): passed.** Through Resend (sandbox sender `onboarding@resend.dev`) to the account owner's address with `scripts/send_test_email.py`: an English urgent-task e-mail and an Arabic meeting invite, both accepted by Resend (message ids recorded in the run). The key stayed in `backend/.env`; neither it nor the full address was printed.
