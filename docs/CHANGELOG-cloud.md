@@ -300,3 +300,58 @@ only to the right people, no e-mail while online), bad/missing tokens, and closi
 Desktop 241 passed (11 new). **Two-client check** (two real app windows, manager and employee, against a
 live server): 21/21 checks in three runs in a row, 0 warnings. Messages arrive live in about 0.1 s, and
 in about 7 s by polling when the live channel is down. Screenshots: `screenshots_redesign/cloud/phase7_*`.
+
+## Phase 8 — Website
+
+There is no separate "eighth update": the user confirmed on 2026-11-10 that it was a slip, so Phase 8 is
+the website and Phase 9 the release.
+
+**The site** (`website/`, Next.js 16, TypeScript, no UI or chart libraries):
+- Public pages: Home, How it works (with app screenshots), Features, Privacy (what stays on the PC and what
+  goes online), Download, Docs & FAQ, Sign up, Sign in. **English and Arabic** (`/en`, `/ar`, full
+  right-to-left layout through logical CSS properties), chosen from the browser's language, with a switch
+  that keeps the page. **Light and dark** themes (system default, remembered, no flash on load).
+- **Download** reads the latest GitHub release on the server (cached for an hour): version, date, every
+  file with its size, the total, the installer button, "View on GitHub", system requirements (Windows
+  10/11, NVIDIA GPU recommended for summarise/translate). If GitHub cannot be reached it links to the
+  releases page.
+- **Sign up** creates a company and its manager through the API, or joins a company with its code or an
+  invite link (pending until approved). **Signed-in area**: managers get Reports (KPIs with change,
+  focus trend, hours per day, apps, ranking with sort, paging and drill-down to one employee, CSV export),
+  Employees (approve/reject, enable/disable, company code, one-time invite links), Meetings and Messages;
+  employees get Meetings and Messages. The chat is live (WebSocket) with polling while disconnected.
+
+**Security**
+- The browser never holds the long-lived token and never calls the API directly. The site's server keeps
+  the tokens in **httpOnly, SameSite=Lax** cookies (Secure in production), forwards only allow-listed API
+  paths (each path segment checked), and refreshes the session **once per token** — so parallel requests
+  can never trip the API's refresh-token-reuse (theft) protection.
+- State-changing calls must come from the site itself (same Origin plus a custom header); otherwise 403.
+- The chat's socket gets a 15-minute access token from `/api/auth/socket` and sends it as its first
+  message. Security headers: no framing, nosniff, strict referrer, camera/microphone/geolocation off.
+- **API**: the website calls from one server, so the API now accepts the visitor's IP for its sign-in rate
+  limits (`X-Client-IP`) — but only together with the shared `WEB_PROXY_SECRET` (constant-time compare).
+
+**API fix found by the website tests**: with FastAPI's defaults, the request's transaction was committed
+*after* the response was sent, so a client acting on an answer at once (signing in right after being
+approved, reloading right after "Accept") could still see the old state. The request dependency now uses
+`scope="function"`: the change is saved before the answer leaves. Also fixed: an old isolation test that
+let the database pick "today" (UTC) and failed near midnight.
+
+**Tests**
+- Website: 26 Playwright tests, passing on three full runs in a row: every public page in both languages
+  (lang/dir, one h1), language redirect and switch, theme memory, the Download page against the real
+  GitHub release, sign-up → dashboard → download, sign out/in, wrong password, Arabic sign-in, join with
+  code + approval on the web, invite link, cross-site refusals and the proxy allow-list, reports with
+  seeded data (sort, paging, drill-down, CSV), meeting lifecycle on the web, chat between two browsers
+  (live delivery and read receipts), disabling an employee. **Accessibility**: axe (WCAG 2.2 AA) on every
+  public page in English and Arabic, light and dark, and on all signed-in pages: no serious or critical
+  problems; a skip link reaches the content first.
+- **Lighthouse** (local production build): desktop 100 / 100 / 100 / 100 (performance, accessibility, best
+  practices, SEO) on Home, Download, Arabic Home and Features; mobile (simulated slow phone) performance
+  79–95, the other three 100.
+- Backend 209 passed (1 skipped), desktop 241 passed.
+- Screenshots: `screenshots_redesign/cloud/phase8_*`.
+
+**Still open**: the preview deployment needs a Vercel account and a publicly reachable API (Phase 9
+deploys the API); error messages that come from the API are in English on the Arabic site.

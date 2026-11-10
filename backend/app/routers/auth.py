@@ -1,4 +1,6 @@
 """/auth: register a company, sign in, refresh, sign out, join a company."""
+import hmac
+
 from fastapi import APIRouter, HTTPException, Request, status
 
 from app.core.config import get_settings
@@ -19,6 +21,14 @@ TOO_MANY = HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Too many attempts, 
 
 
 def _client_ip(request: Request) -> str:
+    """The caller's IP for rate limits. The website calls the API from its own server, so it
+    passes the visitor's IP in ``X-Client-IP``; that header is trusted only together with the
+    shared ``WEB_PROXY_SECRET`` (anyone else could just make it up)."""
+    secret = get_settings().web_proxy_secret
+    forwarded = request.headers.get("x-client-ip", "").strip()
+    given = request.headers.get("x-web-proxy-secret", "")
+    if secret and forwarded and given and hmac.compare_digest(given.encode(), secret.get_secret_value().encode()):
+        return forwarded[:64]
     return request.client.host if request.client else "unknown"
 
 

@@ -53,3 +53,13 @@ def test_rotating_the_join_code_invalidates_the_old_one(client):
     body = {"full_name": "W", "email": "w@acme-corp.com", "password": "correct horse battery"}
     assert client.post("/auth/join", json={**body, "company_code": old}).status_code == 400
     assert client.post("/auth/join", json={**body, "company_code": new}).status_code == 201
+
+
+def test_the_transaction_is_committed_before_the_response_is_sent():
+    """A client may act on an answer at once (sign in right after being approved); the change
+    must already be saved by then."""
+    from typing import get_args
+
+    from app.core.deps import CurrentManager, CurrentUser
+    for alias in (CurrentUser, CurrentManager):
+        assert get_args(alias)[1].scope == "function"

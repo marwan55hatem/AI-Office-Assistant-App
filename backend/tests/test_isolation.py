@@ -27,10 +27,11 @@ def seed_every_table(owner_engine, company_id, manager_id, employee_id) -> dict:
     ids = {"session": uuid.uuid4(), "task": uuid.uuid4(), "calendar": uuid.uuid4(), "document": uuid.uuid4(),
            "meeting": uuid.uuid4(), "invite": uuid.uuid4(), "refresh": uuid.uuid4(), "chat": uuid.uuid4(),
            "manager_chat": uuid.uuid4()}
-    p = {"c": company_id, "m": manager_id, "e": employee_id, "app": f"App of {company_id}", **ids}
+    # "today" is this computer's date, like the checks below use (the database's UTC date can differ near midnight)
+    p = {"c": company_id, "m": manager_id, "e": employee_id, "app": f"App of {company_id}", "today": date.today(), **ids}
     statements = [
         "INSERT INTO sessions (id, company_id, user_id, local_date, started_at, last_seen_at, focus_seconds) "
-        "VALUES (:session, :c, :e, current_date, now(), now(), 600)",
+        "VALUES (:session, :c, :e, :today, now(), now(), 600)",
         "INSERT INTO events (company_id, client_event_id, session_id, user_id, event_type, occurred_at, app_name) "
         "VALUES (:c, gen_random_uuid(), :session, :e, 'focus', now(), 'Code')",
         "INSERT INTO session_apps (company_id, session_id, user_id, app_name, category, seconds) "

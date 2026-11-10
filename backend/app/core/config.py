@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:3000"]
 
     login_attempts_per_minute: int = 5
+    #: shared with the website's server: lets it pass on the visitor's IP for rate limits
+    web_proxy_secret: SecretStr | None = None
     login_attempts_per_ip_per_minute: int = 30
 
     # -- the online chat model (Groq). The key lives only in the server's environment.

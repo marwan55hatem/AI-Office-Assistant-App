@@ -161,3 +161,24 @@ def test_signed_out_token_is_refused_without_ending_other_sessions(client):
     client.post("/auth/logout", json={"refresh_token": phone["refresh_token"]})
     assert client.post("/auth/refresh", json={"refresh_token": phone["refresh_token"]}).status_code == 401
     assert client.post("/auth/refresh", json={"refresh_token": laptop["refresh_token"]}).status_code == 200
+
+
+def test_the_website_may_pass_on_the_visitor_ip_only_with_the_secret(client, monkeypatch):
+    from pydantic import SecretStr
+
+    from app.core.config import get_settings
+    monkeypatch.setattr(get_settings(), "web_proxy_secret", SecretStr("s" * 40))
+    monkeypatch.setattr(get_settings(), "login_attempts_per_ip_per_minute", 2)
+    monkeypatch.setattr(get_settings(), "login_attempts_per_minute", 100)
+
+    def attempt(n, headers):
+        return client.post("/auth/login", json={"email": f"x{n}@acme-corp.com", "password": "wrong password"},
+                           headers=headers).status_code
+
+    # two visitors behind the website: each has their own limit
+    for visitor in ("203.0.113.1", "203.0.113.2"):
+        trusted = {"x-client-ip": visitor, "x-web-proxy-secret": "s" * 40}
+        assert [attempt(i, trusted) for i in range(3)] == [401, 401, 429]
+    # a made-up header without the secret is ignored: the real address counts
+    fake = {"x-client-ip": "198.51.100.9", "x-web-proxy-secret": "wrong"}
+    assert [attempt(i, fake) for i in range(3)] == [401, 401, 429]

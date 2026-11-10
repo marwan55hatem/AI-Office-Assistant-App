@@ -52,7 +52,7 @@ def current_principal(
         yield Principal(user=user, company_id=claims["cid"], role=user.role, session=session)
 
 
-def manager_principal(principal: Annotated[Principal, Depends(current_principal)]) -> Principal:
+def manager_principal(principal: Annotated[Principal, Depends(current_principal, scope="function")]) -> Principal:
     if not principal.is_manager:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only a manager can do this")
     return principal
@@ -73,5 +73,9 @@ def invalidate_reports_after_write(request: Request,
         report_cache.invalidate(claims["cid"])
 
 
-CurrentUser = Annotated[Principal, Depends(current_principal)]
-CurrentManager = Annotated[Principal, Depends(manager_principal)]
+# scope="function": the request's transaction is committed *before* the response is sent.
+# (FastAPI's default for dependencies with yield finishes them after the response, so a client
+# could act on an answer -- "approved", "accepted" -- before the change was saved, and a request
+# right after it would still see the old state.)
+CurrentUser = Annotated[Principal, Depends(current_principal, scope="function")]
+CurrentManager = Annotated[Principal, Depends(manager_principal, scope="function")]
