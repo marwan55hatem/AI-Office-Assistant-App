@@ -1,36 +1,61 @@
 # Architecture
 
-A fully local Windows desktop application: **Python 3.12, PyQt5, SQLite**. Nothing is sent to a server.
+Version 2 has three parts:
 
-## Layers
+| part | stack | role |
+|---|---|---|
+| **Desktop app** (this folder) | Python 3.12, PyQt5 | session tracking with local AI (camera, window, idle), every screen for employees and managers |
+| **Online service** (`backend/`) | FastAPI, SQLAlchemy 2, Alembic, PostgreSQL 17 | accounts, companies, all shared data, reports, e-mail queue, chat hub (WebSocket), AI Chat prompt to Groq |
+| **Website** (`website/`) | Next.js 16 (App Router) | public pages (en/ar, dark/light), sign-up / sign-in / reset, the portal |
 
 ```
-                    main.py  (composition root)         admin.py (standalone admin panel)
-                       |                                        |
-        +--------------+---------------+                        |
-        v                              v                        v
-   ui/  (screens, widgets, theme)                         admin_ui/
+ Desktop app                                Website (Next.js)
+   ui/ screens --> database/repositories       pages + route handlers ("BFF": tokens in httpOnly cookies)
+                      |                                 |
+                   cloud/ (RemoteDatabase, ApiClient,   | /api/proxy/* (allow-list), /api/auth/*
+                   outbox, ChatSocket)                  |
+                      |  HTTPS + WebSocket              |  HTTPS (+ X-Client-IP, shared secret)
+                      +----------------+----------------+
+                                       v
+                    backend/app: routers -> services -> TenantRepository -> PostgreSQL
+                    (JWT + refresh rotation)   (email worker, chat hub,       (Row-Level Security
+                                                AI Chat -> Groq)               per company)
+```
+
+The desktop screens did not change their calls when the data moved online: they use the same
+repositories, now backed by `cloud.remote_db.RemoteDatabase` (HTTP) instead of SQLite
+(`OFFICE_BACKEND=local` keeps the old SQLite path for development).
+
+## Desktop layers
+
+```
+                    main.py  (composition root)
+                       |
+        +--------------+---------------+
+        v                              v
+   ui/  (screens, widgets, theme)    detection/ (camera, screen, session timers)
         |        \
-        |         +--> chat/  ----> assistant/ (intent engine)      detection/ (camera, screen, session timers)
-        |                  \------> knowledge/ (BM25 search)               |
-        |                   \-----> llm/ (language model)                  |
-        v                                                                  |
-   database/  <-----------------------------------------------------------+   (only main-thread code touches it)
+        |         +--> chat/  ----> assistant/ (intent engine)
+        |                  \------> knowledge/ (BM25 search, local mode)
+        |                   \-----> llm/ (the online model, through the service)
+        v
+   database/repositories  -->  cloud/ (online service)  |  database/db_manager (SQLite, local mode)
 ```
 
 Rules of dependency (checked by the tests where possible):
 
-* `ui/` and `admin_ui/` depend on `database/`, `chat/`, `detection/` -- never the other way round.
+* `ui/` depends on `database/`, `chat/`, `detection/`, `cloud/` -- never the other way round.
 * `assistant/`, `chat/`, `knowledge/`, `detection/session.py`, `detection/categories.py` are **Qt-free**; they can be
   tested without a display (`tests/`).
-* Only `database/` writes SQL. The UI calls named methods (`db.get_session(...)`), never `db.conn`.
+* The UI calls named repository methods, never SQL or HTTP directly. On the service only the repositories
+  run queries, and every company-owned table is filtered by `company_id` **and** protected by forced RLS.
 * Heavy libraries (`torch`, `transformers`, `ultralytics`) are imported lazily, so the window opens fast.
 
 ## Module map
 
 | package | files | responsibility |
 |---|---|---|
-| `main.py` | `App` | **composition root**: creates the `DatabaseManager`, builds the screens, navigation, tray notifier, logging |
+| `main.py` | `App` | **composition root**: creates the remote (or local) database, builds the screens, navigation, tray notifier, logging; `--self-check` |
 | `ui/` | `login_screen`, `signup_screen`, `auth_form` | authentication screens and their shared building blocks |
 | | `employee_screen` (`SessionPage`, `EmployeeScreen`) | start/stop a session, live timers, camera preview, screen badges |
 | | `manager_screen` (5 page classes + `ManagerScreen`) | employees, session history, tasks, reports; `ManagerHomeScreen` is the dashboard |
@@ -45,13 +70,15 @@ Rules of dependency (checked by the tests where possible):
 | | `session`, `categories` | the three timers and their priority rules (pure Python) |
 | `assistant/` | `answers`, `intents`, `intent_model`, `lexicon`, `entities`, `playbooks`, `formatting`, `train_intent` | the data-driven chat engine and its trained intent classifier |
 | | `summarizer`, `translator`, `extractors`, `ai_worker` | BART, MarianMT, PDF/text reading, background runner |
-| `chat/` | `chat_client`, `backend_base`, `backend_local`, `backend_cloud`, `models`, `config` | the contract + the local implementation; routing between engine / model / documents |
-| `llm/` | `model_manager`, `service`, `workers`, `prompts`, `status`, `config` | Qwen2.5-1.5B: loading, streaming, prompts, status, the UI-facing service |
+| `chat/` | `chat_client`, `backend_base`, `backend_local`, `backend_cloud`, `models`, `config` | the contract and its implementations; routing between engine / online model / documents |
+| `llm/` | `service`, `workers`, `prompts`, `status` | the online model as the chat screen sees it: status, streaming from the service, stop |
+| `cloud/` | `api`, `remote_db`, `reports_api`, `outbox`, `chat_socket`, `credentials`, `qt_bridge`, `config` | the client for the online service: tokens and refresh, repositories over HTTP, offline outbox for sessions, live chat (QWebSocket), Windows Credential Manager |
 | `knowledge/` | `text`, `bm25`, `store` | chunking, BM25 ranking, documents + visibility |
-| `database/` | `db_manager`, `repositories` | SQLite schema, migrations, all queries; narrow repository views |
-| `admin_ui/` | window + tabs | users, sessions, tasks, events, danger zone |
+| `database/` | `db_manager`, `repositories` | narrow repository views (used by every screen); the SQLite implementation for local mode |
 | `tools/` | `code_audit`, `generate_database_docs` | maintenance scripts |
-| `tests/` | 11 test files + `conftest.py` | the pytest suite (167 tests) |
+| `tests/` | test files + `conftest.py` | the desktop pytest suite |
+| `backend/` | `app/routers`, `app/services`, `app/repositories`, `alembic/`, `tests/` | the online service (see `backend/README.md`) |
+| `website/` | `src/app`, `src/components`, `src/lib`, `tests/`, `unit/` | the website (see `website/README.md`) |
 
 ## Data flows
 
@@ -63,8 +90,7 @@ ScreenThread --screen_update(title, category)---+--> EmployeeScreen --> SessionS
 ScreenThread --idle_update(is_idle, seconds)----+          ^
 QTimer (1 s) ---------------------------------------- tick()  -> one second to exactly one of focus / distraction / away
                                                        |
-                                       state changes -> db.log_event(...)      (events table)
-                                       stop          -> db.end_session(...)    (totals, screen counters)
+                                       stop          -> outbox (on disk) -> POST /sessions  (totals, app names; retried when offline)
 ```
 
 `SessionState` priority (first match wins): keyboard idle -> away; nobody in frame -> away; phone -> distraction;
@@ -74,24 +100,31 @@ distracting window -> distraction; idle window -> away; otherwise focus.
 
 ```
 AIChatScreen --> ChatClient --> LocalBackend.stream_reply
-                                   |  1. AssistantEngine.ask(text)       (intent + the user's own data, from SQL)
-                                   |  2. KnowledgeBase.search(text, role) (only when the engine is not sure)
+                                   |  1. AssistantEngine.ask(text)       (intent + the user's own data, from the service)
+                                   |  2. document search on the service  (only when the engine is not sure)
                                    |  3. route:
                                    |       data question         -> engine text            -> typed into the bubble
-                                   |       general / document    -> prompt for the model   -> GenerateWorker (thread)
+                                   |       general / document    -> POST /ai/chat (stream) -> the service builds the prompt -> Groq
                                    |       model off / missing   -> engine text, or the quoted passages
                                    v
                  ReplyStream (kind "text" | "llm", source "engine" | "llm", sources [...])
 ```
 
-The model's prompt is built from a fixed instruction, its **own** earlier answers in this chat (messages stored with
-`source = 'llm'`) and the matching document passages. It never receives database content (see [PRIVACY.md](PRIVACY.md)).
+The service builds the model's prompt from a fixed instruction, the model's **own** earlier answers in this chat and
+the matching document passages the asker may read. It never receives tasks, calendars or team numbers, and each company
+has a daily token budget (see [PRIVACY.md](PRIVACY.md)).
 
 ### 3. Documents
 
-Manager adds `.txt`/`.md` on the Knowledge screen -> `KnowledgeBase.add_file` -> `knowledge_docs` row ->
-on the next search the BM25 index of that audience (manager: all documents; employee: `visibility = 'everyone'`) is rebuilt
-when the table signature changed.
+Manager adds `.txt`/`.md` on the Knowledge screen -> uploaded to the service -> on a search the BM25 index of that
+audience (manager: all documents; employee: `visibility = 'everyone'`) is built from the company's documents.
+
+### 4. Live chat and notifications
+
+A message is saved in the database first; after the transaction commits, the service's `ChatHub` pushes it to every
+open WebSocket of the conversation's people (the app's `ChatSocket`, the website's browser socket). Unread messages left
+for 10 minutes while the person is offline are queued as an e-mail (never with the message text). The hub is in memory:
+one service instance (see [PRODUCTION.md](PRODUCTION.md)).
 
 ## Extension points (data-driven where possible)
 
@@ -101,9 +134,9 @@ when the table signature changed.
 | a task "how-to" plan | a playbook entry in `assistant/playbooks.py` |
 | a screen category / its badge | `detection/categories.py` + one row in `SCREEN_BADGES` (`ui/employee_screen.py`) |
 | a window keyword | `PRODUCTIVE_KEYWORDS` / `DISTRACTION_KEYWORDS` in `detection/screen_monitor.py` |
-| a database method | the method in `DatabaseManager` **and** its repository list in `database/repositories.py` (a test enforces this) |
+| a data feature | an Alembic migration (with RLS policy), a service + router in `backend/`, the isolation tests, then the method in `cloud/remote_db.py` and its repository list in `database/repositories.py` |
 | a chat backend | subclass `chat.backend_base.ChatBackend`; raise `BackendUnavailable` from `__init__` if it cannot work |
-| another language model | an object with the `ModelService` methods (`llm/service.py`), injected into `AIChatScreen(model_service=...)` |
+| another language model | the service's AI provider (`backend/app/services/`); the desktop app does not change |
 
 ## Composition and injection
 

@@ -1,11 +1,18 @@
 # Builds the offline Windows installer: models -> tests -> PyInstaller -> Inno Setup.
-# Usage (from anywhere):  powershell -ExecutionPolicy Bypass -File packaging\build.ps1 [-SkipModels] [-SkipTests] [-NoInstaller]
+# Usage (from anywhere):
+#   powershell -ExecutionPolicy Bypass -File packaging\build.ps1 -ApiUrl https://<service> [-SkipModels] [-SkipTests] [-NoInstaller]
+# -ApiUrl is the online service the installed app connects to (https; http only for localhost).
 param(
+    [string]$ApiUrl = "",
     [switch]$SkipModels,
     [switch]$SkipTests,
     [switch]$NoInstaller
 )
 $ErrorActionPreference = "Stop"
+if (-not $ApiUrl) { throw "-ApiUrl is required, e.g. -ApiUrl https://office-assistant-api.onrender.com" }
+if ($ApiUrl -notmatch '^https://' -and $ApiUrl -notmatch '^http://(localhost|127\.0\.0\.1)(:\d+)?/?$') {
+    throw "-ApiUrl must start with https:// (http only for localhost)"
+}
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 $env:PYTHONIOENCODING = "utf-8"
@@ -32,6 +39,10 @@ Step "PyInstaller" {
     Remove-Item -Recurse -Force build, dist\OfficeAssistant -ErrorAction SilentlyContinue
     pyinstaller packaging/OfficeAssistant.spec --noconfirm --clean
 }
+
+# The address of the online service, read by cloud/config.py (OFFICE_API_URL still overrides it).
+Set-Content -Path dist\OfficeAssistant\_internal\server_url.txt -Value $ApiUrl.TrimEnd("/") -Encoding ascii -NoNewline
+Write-Host "Service address: $ApiUrl"
 
 # The developer database must never be shipped.
 $leaked = Get-ChildItem dist\OfficeAssistant -Recurse -Include *.db, *.bak -ErrorAction SilentlyContinue

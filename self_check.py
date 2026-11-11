@@ -1,13 +1,26 @@
-"""Build verification: load every AI model the app ships and run it once.
+"""Build verification: check that the parts which run on this PC work in this build.
 
     OfficeAssistant.exe --self-check        (installed / frozen app)
     python main.py --self-check             (from source)
 
-The result goes to the log (``<user data>/logs/app.log``); the exit code is the number of
-failed checks, so ``packaging/build.ps1`` can gate a release on it. No window is opened.
+What is checked -- everything that must work without the server:
+
+* **storage**     the user-data folder is writable and the offline queue (outbox) opens there,
+* **intent**      the app's own intent classifier (routes AI Chat questions),
+* **detector**    YOLO12n person and phone detection,
+* **summarizer**  BART summaries,
+* **translator**  MarianMT translation.
+
+The company database and the chat model are online since version 2 (the API and Groq), so they
+are not part of this check; the app tells the user when the server cannot be reached.
+
+The result goes to the log (``<user data>/logs/app.log``); the exit code is the number of failed
+checks, so ``packaging/build.ps1`` can stop a release when one fails. No window is opened.
 """
 import logging
+import os
 import time
+import uuid
 
 import numpy as np
 
@@ -18,6 +31,30 @@ SAMPLE_TEXT = (
     "The team opened two new offices and hired forty employees. Management expects further growth "
     "next year because of strong demand for the new product line."
 )
+
+
+def _storage():
+    from app_paths import USER_DATA_DIR
+    from cloud.outbox import Outbox
+
+    os.makedirs(USER_DATA_DIR, exist_ok=True)
+    path = os.path.join(USER_DATA_DIR, f"self-check-{uuid.uuid4().hex[:8]}.db")
+    outbox = Outbox(path)
+    try:
+        return USER_DATA_DIR
+    finally:
+        outbox.close()
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                os.remove(path + suffix)
+            except OSError:
+                pass
+
+
+def _intent():
+    from assistant.intent_model import get_classifier
+    intent, confidence = get_classifier().predict("what are my tasks for today")
+    return f"{intent} ({confidence:.2f})"
 
 
 def _summarize():
@@ -36,14 +73,7 @@ def _detect():
     return f"person={person} phone={phone}"
 
 
-def _database():
-    from database.db_manager import DatabaseManager, DB_PATH
-    DatabaseManager()
-    return DB_PATH
-
-
-# The chat model runs online (Phase 3), so only the local models are checked here.
-CHECKS = [("database", _database), ("detector", _detect), ("summarizer", _summarize),
+CHECKS = [("storage", _storage), ("intent", _intent), ("detector", _detect), ("summarizer", _summarize),
           ("translator", _translate)]
 
 
@@ -58,5 +88,6 @@ def run() -> int:
         except Exception:
             failed += 1
             logger.exception("SELF-CHECK FAIL %s", name)
-    logger.info("SELF-CHECK done: %d of %d failed", failed, len(CHECKS))
+    logger.info("SELF-CHECK done: %d of %d passed%s", len(CHECKS) - failed, len(CHECKS),
+                "" if not failed else f" ({failed} failed)")
     return failed

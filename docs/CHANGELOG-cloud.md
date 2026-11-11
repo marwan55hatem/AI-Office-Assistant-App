@@ -402,3 +402,34 @@ code already met every requirement (see `website/README.md`).
 
 **Still open**: the preview deployment (Vercel + a public API) needs the owner's accounts (Phase 9); the CI
 workflow runs once the branch is pushed; API error messages stay English on the Arabic site.
+
+## Phase 9 — release preparation (2026-11-11)
+
+**Desktop**
+- `self_check.py` checks only what the PC runs: the local data folder, intent classifier, camera detector,
+  summariser and translator (the database and the chat model are online). 5 of 5 pass.
+- The installer is built for one service address: `packaging/build.ps1 -ApiUrl https://…` writes
+  `_internal\server_url.txt`, read by `cloud/config.py` (`OFFICE_API_URL` still overrides it). Installer
+  version 2.0.0; no Qwen, no admin program.
+- PyTorch 2.14.1 / torchvision 0.29.1 (CUDA 13.0) — removes 12 torch advisories; self-check and tests pass.
+
+**Service**
+- `scripts/start.py`: migrations and the app role on every start, then uvicorn behind the host's proxy.
+  Docker `HEALTHCHECK`; new `GET /health/ready` (checks the database, 503 when down).
+- Production settings check at start-up: refuses http links / origins and the RLS bypass; warns about a
+  missing e-mail provider, Groq key or proxy secret. `httpx` moved to the runtime requirements (the
+  production image failed without it).
+- Backups: `.github/workflows/backup.yml` (daily `pg_dump`, AES-256 encrypted, kept 14 days) and
+  `scripts/restore_check.py`; dump → encrypt → decrypt → restore → compare tested locally (PASSED).
+
+**Website**: vitest 4.1.12 and a `minimatch` override — `npm audit` 0 vulnerabilities.
+
+**Docs**: README, USER_GUIDE, INSTALL, PRIVACY, THIRD_PARTY_NOTICES, ARCHITECTURE, AI_STACK, DEVELOPMENT,
+TESTING, TROUBLESHOOTING, DEPLOYMENT rewritten for version 2; new PRODUCTION.md (hosting, settings,
+backups, security checklist); CHANGELOG 2.0.0.
+
+**Tests**: desktop 241 passed; service 223 passed (1 skipped), incl. 6 production tests; website lint,
+types and 28 unit tests clean.
+
+**Still open (needs the owner)**: hosting accounts and the deploy, the Groq key and Resend domain in
+production, the backup secrets, the installer build with the final address, the `v2.0.0` tag and release.

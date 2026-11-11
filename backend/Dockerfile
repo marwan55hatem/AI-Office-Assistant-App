@@ -15,5 +15,6 @@ RUN useradd --create-home --uid 10001 api
 USER api
 
 EXPOSE 8000
-# Migrations run separately (as the owner): alembic upgrade head
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+# scripts/start.py: migrations (when MIGRATIONS_DATABASE_URL is set), the app role, then uvicorn on $PORT
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3   CMD python -c "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/health/ready' % os.environ.get('PORT','8000'), timeout=4)"
+CMD ["python", "scripts/start.py"]

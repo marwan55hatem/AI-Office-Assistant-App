@@ -1,59 +1,72 @@
 # Privacy
 
-The product monitors people, so privacy is a design requirement, not an afterthought. This page says what is
-collected, what is deliberately **not**, who can see what, and where the guarantees are enforced (and tested).
+The product measures how people work, so privacy is a design requirement. This page says what stays on
+the PC, what goes to the company's online account, who can see what, and where each guarantee is
+enforced and tested. (Version 2: online and multi-company. Version 1 was fully local.)
 
-## 1. What is collected during a session
+## 1. What stays on the PC
 
-| signal | how | what is kept |
+| signal | how | what happens to it |
 |---|---|---|
-| presence / phone | webcam frame -> YOLO12n | **two booleans per frame** feed the timers. The frame is shown in the employee's own preview and dropped. **No image or video is ever written to disk** (no `imwrite`/`VideoWriter` anywhere in the code). |
-| focused window | the window **title** only (`SendMessageTimeoutW`) | classified as productive / neutral / distraction / idle; the title is shown on the employee's own screen and held in memory. **It is not stored in the database.** |
-| keyboard / mouse | Win32 `GetLastInputInfo` -> "seconds since last input" | one number. **No key is read or logged, no mouse position, no screenshot.** |
-| result | three time counters + three screen counters | `sessions` row; `events` rows hold only the *type* (`focus` / `distraction` / `away`) and a timestamp |
+| camera picture | webcam frame → YOLO12n | analysed in memory: two booleans ("person present", "phone visible") feed the timers. The frame is shown only in the employee's own preview. **No image or video is written to disk or sent anywhere.** |
+| window title | the focused window's title | classified as productive / neutral / distraction / idle and shown on the employee's own screen. **Never stored and never sent.** |
+| keyboard / mouse | Win32 `GetLastInputInfo` → "seconds since last input" | one number. **No key, no mouse position, no screenshot.** |
+| summaries and translations | BART and MarianMT on the PC | the text and the result stay on the PC |
+| AI Chat questions about your own tasks and calendar | the app's own intent classifier, on the PC | answered from your data through the API; nothing goes to the online model |
 
-## 2. Who can see what
+## 2. What goes to the company's online account
+
+| data | why |
+|---|---|
+| name, e-mail, role, password **hash** (Argon2id) | sign-in |
+| session totals: focus, distraction and away seconds per session and day | reports |
+| **program names** used during a session (for example "Word", "Chrome") with seconds — never window titles | "most-used apps" in reports |
+| tasks, calendar events, meeting requests, chat messages | the features themselves |
+| documents a manager uploads for the AI Chat | answers with sources |
+| AI Chat: general/document questions, the model's earlier answers in that chat, matching passages from documents the asker may read | sent through the company's server to the online model (Groq, `openai/gpt-oss-120b`). Tasks, calendars and team numbers are **never** in that prompt. |
+
+Each company's data is kept apart twice: every query is filtered by the company (application code) and
+PostgreSQL **Row-Level Security** refuses other companies' rows to the API's database role, which has no
+power to bypass it. Tests try every table and endpoint across companies.
+
+## 3. Who can see what
 
 | data | employee | manager |
 |---|---|---|
-| own sessions, tasks, calendar, chats | yes | yes (own) |
-| other employees' sessions and numbers | **no** | yes (Employees, Sessions, Reports, Home) |
-| team questions in the AI Chat | **refused** | answered from SQL |
-| documents marked *Everyone* | searchable | searchable |
-| documents marked *Managers only* | **invisible** | searchable |
-| another user's chat | **no** (`PermissionError`) | no (chats are private to their owner) |
+| own sessions, tasks, calendar, AI chats | yes | yes (own) |
+| other employees' sessions and reports | **no** | yes (same company only) |
+| own conversation with the managers | yes | yes (every employee's, same company) |
+| another employee's conversation | **no** (404) | — |
+| documents marked *Managers only* | **invisible** (not even searched) | yes |
+| another company's anything | **no** | **no** |
 
-## 3. How the AI Chat enforces it (by construction, not by a prompt)
+## 4. E-mail
 
-1. **Role gate before data.** `AssistantEngine.ask` loads other people's records only when the asker is a manager
-   (`people = self._employees() if is_manager else []`). A manager-only intent asked by an employee returns a refusal *before*
-   any team query runs. `tests/test_privacy.py` makes the employee's `_employees()` raise and asks every team question.
-2. **The language model never sees the database.** Its prompt is a fixed instruction, its own earlier answers, the question and
-   document passages. Task titles, names and team numbers are not in it; `test_the_model_prompt_never_contains_database_content`
-   asserts this for an employee, a manager and a one-task user.
-3. **The model's memory contains only its own answers.** Every stored assistant message has a `source` (`engine` or `llm`).
-   Only `llm` pairs are fed back, so a data-bearing engine reply (a task list, the team status) can never re-enter a prompt.
-4. **Visibility is applied before search.** An employee's BM25 index is *built* from the `everyone` documents only; a manager-only
-   passage cannot be ranked, quoted, put in a prompt or cited for an employee. Changing a document's visibility takes
-   effect at once (the index is rebuilt when the table signature changes).
-5. **Ownership checks.** Every chat operation first checks `chat.user_id == the logged-in user`.
-6. **Interface segregation helps.** `db.chats` / `db.knowledge` repositories expose only their own methods, so code that handles
-   chats cannot call, say, `delete_user_cascade` (tested).
+The service e-mails urgent tasks (always), meetings, meeting-request answers and messages left unread
+for 10 minutes while the person is offline (these can be turned off in Settings → Notifications), and
+password-reset links. **E-mails never contain the text of a chat message.** The e-mail log keeps the
+type and status of each e-mail, never the address or the body.
 
-## 4. Where data goes
+## 5. The online model (Groq)
 
-* **Nothing leaves the computer** while the app works: no telemetry, no cloud API, no analytics.
-* The language model loads with `local_files_only=True`.
-* The first use of the *summariser* and the *translator* downloads their model weights from the Hugging Face hub if they are
-  not already in the local cache (one-time, no user data is sent). After that they run offline.
+Groq's terms: requests are not used for training; logs may be kept for up to 30 days for abuse checks
+(Zero Data Retention can be switched on in Groq's console). The app's Settings show the same list of
+what is and is not sent, and the online model can be switched off there.
 
-## 5. Known limitations (honest list)
+## 6. Security measures (summary)
 
-| limitation | consequence | suggested next step |
+Argon2id passwords (10 characters minimum for new ones); access tokens for 15 minutes and rotating refresh
+tokens (a reused one signs the user out everywhere); the website keeps tokens in httpOnly cookies; rate
+limits on sign-in, join and password reset; HTTPS only in production; strict Content Security Policy on
+the website; the chat's WebSocket refuses other sites; encrypted daily database backups. Details and the
+release checklist: [PRODUCTION.md](PRODUCTION.md).
+
+## 7. Known limitations
+
+| limitation | consequence | next step |
 |---|---|---|
-| **Passwords are stored in plain text** in `users.password` | anyone who can open `data/office_assistant.db` can read them; `get_all_users` returns them to the admin panel, which can also reset them | salted PBKDF2/bcrypt hash with a login-time upgrade of old rows (**not done**: the admin panel and the database self-test rely on the stored value) |
-| The database file is not encrypted | file access = data access | OS-level disk encryption, or SQLCipher |
-| Roles are enforced by the application, not by the database | a modified client could bypass them | acceptable for a local single-user-per-PC tool; a server would need server-side checks |
-| Demo accounts (`manager/1234`, `marwan/1234`) are re-created by `seed_demo_users` / `factory_reset` | known credentials on a fresh install | force a password change on first login |
-| The intent classifier is ~85 % accurate | a wrong intent gives a wrong *kind* of answer, never a leak: for an employee a team intent is refused, or -- when it was only a weak match -- the question goes to the model, which has no data at all | more training data |
-| The 1.5 B model can be wrong | an answer may be inaccurate | the UI labels sources; read generated code before using it |
+| A manager sees every employee's reports and conversations in the company | by design for a small team | per-team managers |
+| The online model can be wrong | an answer may be inaccurate | the UI shows sources; read generated code before using it |
+| The intent classifier is ~85 % accurate | a wrong *kind* of answer, never a leak (team questions are refused for employees) | more training data |
+| The installer is not code-signed | Windows SmartScreen warns | a code-signing certificate |
+| Error messages from the server are in English on the Arabic website | mixed languages | translate the API's messages |

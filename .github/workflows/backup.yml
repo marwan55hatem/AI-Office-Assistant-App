@@ -1,0 +1,49 @@
+name: Database backup
+
+# A daily encrypted dump of the production database, kept 14 days as a workflow artifact.
+# The repository is public, so the dump is encrypted (AES-256, key from BACKUP_PASSPHRASE)
+# before it is uploaded; without the passphrase the artifact is unreadable.
+# Restore: see docs/PRODUCTION.md ("Backups and restore").
+
+on:
+  schedule:
+    - cron: "30 1 * * *"      # 01:30 UTC every day
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    env:
+      BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+    steps:
+      - name: Check the secrets
+        run: |
+          if [ -z "$BACKUP_DATABASE_URL" ] || [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "::warning::BACKUP_DATABASE_URL / BACKUP_PASSPHRASE are not set; nothing to back up."
+            echo "SKIP=1" >> "$GITHUB_ENV"
+          fi
+      - name: Dump (pg_dump 17, custom format)
+        if: env.SKIP != '1'
+        run: |
+          docker run --rm -e URL="$BACKUP_DATABASE_URL" postgres:17 \
+            sh -c 'pg_dump "$URL" --format=custom --no-owner --no-privileges' > office.dump
+          test -s office.dump
+          echo "dump size: $(stat -c %s office.dump) bytes"
+      - name: Encrypt
+        if: env.SKIP != '1'
+        run: |
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:BACKUP_PASSPHRASE \
+            -in office.dump -out "office-$(date -u +%Y%m%d-%H%M).dump.enc"
+          rm office.dump
+      - name: Keep for 14 days
+        if: env.SKIP != '1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: office-db-backup
+          path: office-*.dump.enc
+          retention-days: 14
+          if-no-files-found: error

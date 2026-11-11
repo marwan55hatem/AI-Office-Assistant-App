@@ -4,27 +4,32 @@
 
 | command | what it checks | needs |
 |---|---|---|
-| `python -m pytest tests/` | 167 tests: session timers and their priority rules, window classification and the WhatsApp rule, database (accounts, tasks, deadlines, calendar, sessions, migrations, export/import), chat routing (engine vs model), privacy (employees never get team data; the model prompt never contains database content), chat memory, BM25 knowledge search, safe Markdown, repositories and the backend contract, headless screens (login, sign-up, chat with a fake model, settings, knowledge, admin dialogs) | nothing — temporary databases, offscreen Qt, fake model |
-| `python database/db_manager.py` | the database self-test (all methods on a copy) | — |
-| `python -m chat.selftest` | 112 checks of the chat engine with readable output | — |
-| `python -m knowledge.selftest` | 42 checks of chunking, BM25 and visibility | — |
-| `python main.py --self-check` (or `OfficeAssistant.exe --self-check`) | loads and runs every shipped model once (detector, summariser, translator, chat) + database; exit code = failures; results in the log | the model files |
-| `python -m llm.selftest` | the real Qwen model: load, stream, stop, history trimming, CPU fallback, Qt workers | the model files; a GPU for speed |
+| `python -m pytest tests/` | desktop app: session timers and their priority rules, window classification, the client for the online service (offline outbox, token refresh, live chat socket), chat routing (classifier vs online model), privacy (employees never get team data; the online model never receives tasks, calendars or team numbers), BM25 knowledge search, safe Markdown, repositories, headless screens (sign-in, sign-up, chat, settings, knowledge, reports, meetings, messages) | nothing — offscreen Qt, fake service and fake model |
+| `cd backend && python -m pytest` | online service: accounts, invites, approval, tokens and rotation, password reset, rate limits, sessions, reports, tasks, calendar, meeting requests, chat (REST + WebSocket), e-mail queue and templates, AI Chat, **tenant isolation of every table and endpoint (application filter and Row-Level Security)**, production settings | PostgreSQL 17 in Docker (`docker compose up -d db`) |
+| `cd website && npm run lint && npm run typecheck && npm test` | website: lint, types, unit tests (forms, validation, dictionaries, proxy rules) | Node 22 |
+| `cd website && npx playwright test` | website end to end in Chromium: pages in both languages and themes, sign-up / sign-in / reset, portal, accessibility (axe) | the service and the website running |
+| `python -m chat.selftest` | the chat engine with readable output | — |
+| `python -m knowledge.selftest` | chunking, BM25 and visibility | — |
+| `python self_check.py` (or `OfficeAssistant.exe --self-check`) | loads and runs every local model once (intent classifier, detector, summariser, translator) and the local data folder; exit code = failures | the model files |
+| `SOURCE_URL=… RESTORED_URL=… python backend/scripts/restore_check.py` | a restored backup has every table with the same rows | two databases |
 
-All of them must pass before a release (the build script runs pytest and the database self-test automatically).
+CI (`.github/workflows/ci.yml`) runs the service and website suites on every push. The installer build
+script runs the desktop tests and the frozen self-check.
 
-## Manual acceptance checklist (on the installed app)
+## Manual acceptance checklist (installed app + website)
 
-1. Log in as `manager` and as `marwan`; sign up a new employee and approve it.
+1. Website: create a company; copy the company code. App: *Join a company* as an employee; the manager
+   approves them on the website or in the app.
 2. Employee: **Start session** — the camera preview shows, *Person* turns green; switch to a distracting site —
    the distraction timer runs; leave the keyboard for 90 s — away runs; **Stop session** — the session appears
-   under the manager's *Sessions*.
-3. Manager assigns a task with a deadline in 1 hour — the employee sees it with a *due soon* badge and gets a notification.
-4. Manager creates a calendar event inviting the employee — it appears in the employee's calendar and badge.
-5. AI Helper: summarise a paragraph, open a PDF and summarise it, translate English → Arabic and Arabic → French.
-6. AI Chat (employee): "What tasks do I have?" (engine), "How do I build a CNN?" (model, streams; *Stop* works),
+   in the manager's *Reports*.
+3. Disconnect the network during a session, stop it, reconnect — the session is sent (offline banner, then gone).
+4. Manager assigns an **urgent** task — the employee sees it and receives an e-mail.
+5. Employee requests a meeting with 2 times; the manager proposes another; the employee accepts — it is in
+   both calendars.
+6. Messages: employee writes, manager answers on the website — both see it live, with *Read* ticks.
+7. AI Helper: summarise a paragraph and a PDF, translate English → Arabic and Arabic → French.
+8. AI Chat (employee): "What tasks do I have?" (from your data), "How do I build a CNN?" (online model),
    "Who is the best performer?" (refused).
-7. Manager: add a `.md` note under *Knowledge*; ask the chat about it — the answer ends with *Sources: <file>*.
-8. Settings: switch the theme; switch the AI model off — the chat badge says *off*.
-9. Admin panel: export the database, then import it back.
-10. With the network disconnected, repeat 5 and 6 — everything still works (models are bundled).
+9. Manager: add a `.md` note under *Knowledge*; ask the chat about it — the answer ends with *Sources: <file>*.
+10. Website: forgot password → e-mail link → new password → sign in; switch language and theme.

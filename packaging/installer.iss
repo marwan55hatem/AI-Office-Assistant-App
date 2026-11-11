@@ -4,7 +4,7 @@
 ; Output: dist\installer\OfficeAssistant-Setup.exe + OfficeAssistant-Setup-N.bin
 
 #define MyAppName      "Office Assistant"
-#define MyAppVersion   "1.0.0"
+#define MyAppVersion   "2.0.0"
 #define MyAppPublisher "TM471B - Arab Open University"
 #define MyAppExe       "OfficeAssistant.exe"
 ; Both can be overridden on the command line: iscc /DSourceDir=... /DOutDir=... installer.iss

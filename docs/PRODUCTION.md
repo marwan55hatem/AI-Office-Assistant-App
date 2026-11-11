@@ -1,0 +1,103 @@
+# Running Office Assistant in production
+
+Three parts go online; the desktop app connects to the service.
+
+| part | what | suggested host |
+|---|---|---|
+| **Service** (`backend/`) | FastAPI in Docker: accounts, data, reports, e-mail, chat, AI Chat prompt | Render (Docker web service) — or Railway / Fly.io |
+| **Database** | PostgreSQL 17 | Neon — or the host's managed PostgreSQL |
+| **Website** (`website/`) | Next.js | Vercel |
+| E-mail | Resend (or SMTP / SendGrid) | needs a verified sending domain to e-mail anyone but yourself |
+| Online model | Groq | API key |
+
+Health: `GET /health` (the process) and `GET /health/ready` (the process **and** the database; 503 when
+the database does not answer) — use `/health/ready` as the host's health check.
+
+## 1. Database
+
+1. Create a PostgreSQL 17 database. Note two connection strings:
+   * the **owner** (runs migrations): `MIGRATIONS_DATABASE_URL`;
+   * the **app role** `office_app`, created by the service on its first start with the password you
+     choose in `APP_ROLE_PASSWORD`: `DATABASE_URL`. It has no superuser or BYPASSRLS right, so
+     Row-Level Security applies to every query the API makes; the API refuses to start otherwise.
+2. Both URLs use the `postgresql+psycopg://` scheme and `?sslmode=require` on hosted databases.
+
+## 2. Service settings (environment variables)
+
+| variable | value | required |
+|---|---|---|
+| `ENVIRONMENT` | `production` | yes |
+| `DATABASE_URL` | `postgresql+psycopg://office_app:<APP_ROLE_PASSWORD>@<host>/<db>?sslmode=require` | yes |
+| `MIGRATIONS_DATABASE_URL` | the owner's URL (migrations run at every start) | yes |
+| `APP_ROLE_PASSWORD` | a long random password (creates / updates `office_app`) | yes |
+| `JWT_SECRET` | 48+ random characters: `python -c "import secrets;print(secrets.token_urlsafe(48))"` | yes |
+| `CORS_ORIGINS` | `["https://<website>"]` — https only; also the origins allowed on the chat WebSocket | yes |
+| `APP_LINK_URL` | `https://<website>` — links in e-mails (https only) | yes |
+| `WEB_PROXY_SECRET` | 40+ random characters; the same value on the website | recommended |
+| `GROQ_API_KEY` | Groq key (AI Chat general questions) | recommended |
+| `EMAIL_PROVIDER`, `EMAIL_FROM`, `RESEND_API_KEY` | `resend`, `Office Assistant <no-reply@<your domain>>`, key | recommended |
+| `AI_DAILY_TOKEN_BUDGET` | tokens per company per day (default 100 000) | no |
+
+The service **refuses to start** in production with an http link, an http CORS origin or the RLS bypass
+switched on, and logs a warning for a missing e-mail provider, Groq key or proxy secret. Interactive API
+docs (`/docs`) are off in production. Secrets live only in the host's settings — never in git or in the
+desktop app.
+
+## 3. Deploy the service (Render)
+
+1. *New → Web Service → from the GitHub repository*, root directory `backend`, runtime **Docker**.
+2. Add the variables of section 2; health check path `/health/ready`.
+3. Deploy. The container (`scripts/start.py`) runs `alembic upgrade head`, creates/updates the app role,
+   then starts uvicorn on `$PORT` behind the host's proxy (client IPs for rate limits come from it).
+4. Check: `https://<service>/health/ready` → `{"status":"ok","database":"ok"}`.
+
+Note: free plans that sleep after inactivity make the first request slow and drop live chat connections
+(the app and website reconnect and catch up). A paid "always on" plan avoids it. The live chat and the
+in-memory rate limits assume **one** service instance (see `app/services/chat_hub.py`).
+
+## 4. Deploy the website (Vercel)
+
+1. *Add New → Project → the GitHub repository*, root directory `website`, framework Next.js.
+2. Variables: `API_URL=https://<service>`, `SITE_URL=https://<website>`, `WEB_PROXY_SECRET` (same as the
+   service), optional `PUBLIC_API_WS_URL=wss://<service>` (when it differs from `API_URL`), `GITHUB_TOKEN`
+   (release list rate limit), `DOWNLOAD_URL` (installer link instead of the GitHub release's).
+3. Deploy, then set the service's `CORS_ORIGINS` and `APP_LINK_URL` to the website's final address.
+
+## 5. Point the desktop app at the service
+
+The installer is built with the service address (`packaging/build.ps1 -ApiUrl https://<service>`).
+`OFFICE_API_URL` overrides it on a PC (testing).
+
+## 6. Backups and restore
+
+* **Daily, encrypted**: `.github/workflows/backup.yml` runs `pg_dump` (PostgreSQL 17, custom format) at
+  01:30 UTC, encrypts the file with AES-256 (`openssl enc -aes-256-cbc -pbkdf2 -iter 200000`) using the
+  repository secret `BACKUP_PASSPHRASE`, and keeps it 14 days as a workflow artifact. Set the repository
+  secrets `BACKUP_DATABASE_URL` (owner, plain `postgresql://…` form) and `BACKUP_PASSPHRASE` (store the
+  passphrase somewhere safe as well: without it a backup cannot be read). The repository is public, so
+  only encrypted files are uploaded.
+* **Also**: the database host's own backups / point-in-time restore where the plan offers it.
+* **Restore**:
+  ```bash
+  openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:BACKUP_PASSPHRASE -in office-….dump.enc -out office.dump
+  createdb restored && pg_restore --no-owner -d restored office.dump
+  SOURCE_URL=… RESTORED_URL=… python backend/scripts/restore_check.py   # every table, row by row count
+  ```
+* **Tested** (2026-11-11, local PostgreSQL 17): dump → encrypt → decrypt → restore into a new database →
+  `restore_check.py`: every table identical (PASSED); a wrong passphrase is refused.
+
+## 7. Release checklist (security)
+
+| item | status |
+|---|---|
+| Argon2id password hashing; 10-character minimum for new passwords | done, tested |
+| No secrets in git (`.env` ignored, `.env.example` only); none in the desktop app or the browser bundle | done; history scanned for API-key patterns |
+| HTTPS only (production refuses http links/origins; cookies `Secure`; website upgrades insecure requests) | done |
+| Tenant isolation: application filter + forced RLS; tests for every table and endpoint across companies | done, tested |
+| JWT expiry (15 min) and refresh-token rotation with reuse detection | done, tested |
+| Input validation (Pydantic on the API, form checks on the website) | done, tested |
+| Rate limits: sign-in, join, register, password reset (per IP and per e-mail), chat flood limits, AI budget | done, tested |
+| Dependency audit: `pip-audit` (service, desktop), `npm audit` (website) | done 2026-11-11: no known vulnerabilities (torch raised to 2.14.1, vitest to 4.1.12) |
+| Minimal logging: no passwords, tokens, message bodies, e-mail addresses or window titles | done; checked in live runs |
+| Backups encrypted and a restore tested | done (section 6) |
+| Website: CSP with nonce, no framing, nosniff, referrer policy; same-origin checks on state changes | done, tested |

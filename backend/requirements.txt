@@ -9,3 +9,5 @@ pydantic-settings==2.16.2
 argon2-cffi==25.1.0
 PyJWT==2.15.1
 email-validator==2.3.0
+# the Groq client and the e-mail providers (Resend, SendGrid)
+httpx==0.28.1

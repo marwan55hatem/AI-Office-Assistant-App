@@ -31,12 +31,17 @@
     "eslint-config-next": "16.4.6",
     "jsdom": "^26.1.0",
     "typescript": "^5",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.12"
   },
   "browserslist": [
     "chrome >= 111",
     "edge >= 111",
     "firefox >= 111",
     "safari >= 16.4"
-  ]
+  ],
+  "overrides": {
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "11.0.7"
+    }
+  }
 }
