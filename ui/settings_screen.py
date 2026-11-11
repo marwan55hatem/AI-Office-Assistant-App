@@ -465,7 +465,10 @@ class SettingsScreen(QWidget):
         version.setObjectName("BodyLabel")
         layout.addWidget(version)
 
-        privacy = QLabel("🔒  All data stored locally on this device")
+        online = getattr(self.db, "api", None) is not None
+        privacy = QLabel("🔒  Your data is kept in your company's account · camera images never leave this PC"
+                         if online else "🔒  All data stored locally on this device")
+        privacy.setWordWrap(True)
         privacy.setObjectName("FeedText")
         layout.addWidget(privacy)
         return card

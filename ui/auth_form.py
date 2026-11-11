@@ -10,7 +10,7 @@ ACCENT_BAR_HEIGHT = 4
 TITLE_FONT_SIZE = 28
 SUBMIT_BUTTON_HEIGHT = 56      # the big accent button of a form
 BODY_SPACING = 10
-FOOTER_TEXT = "🔒 All data stored locally on this device"
+FOOTER_TEXT = "🔒 Camera images never leave this PC"
 
 
 class LogoTile(QLabel):

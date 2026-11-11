@@ -30,3 +30,6 @@ screenshots_redesign/*.tmp.png
 !.env.example
 .neon
 node_modules/
+
+# Local development: the service address for "python main.py" (cloud/config.py)
+/server_url.txt

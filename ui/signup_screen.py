@@ -81,7 +81,6 @@ class SignupScreen(QWidget):
         layout.addSpacing(theme.SP_1)
         self.submit_button = make_primary_button("Submit Request", self._on_submit)
         layout.addWidget(self.submit_button)
-        add_centered_note(layout, "Your manager will review your request shortly.", wrap=True)
         add_centered_note(layout, FOOTER_TEXT)
         return card
 
