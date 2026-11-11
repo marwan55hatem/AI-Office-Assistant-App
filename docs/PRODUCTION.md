@@ -15,7 +15,7 @@ the database does not answer) — use `/health/ready` as the host's health check
 
 ## 1. Database
 
-1. Create a PostgreSQL 17 database (Neon: a project in *AWS Europe Central 1 (Frankfurt)*, the same region
+1. Create a PostgreSQL 17 database (Neon: here AWS US East 1 (N. Virginia), the same region
    as the service). Copy the **owner's direct connection string** (not the pooled one): it becomes
    `MIGRATIONS_DATABASE_URL`, used only for migrations and to create the app role.
 2. The API itself connects as the **app role** `office_app`, which the service creates on its first start

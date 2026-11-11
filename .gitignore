@@ -28,3 +28,5 @@ screenshots_redesign/*.tmp.png
 .env
 .env.*
 !.env.example
+.neon
+node_modules/

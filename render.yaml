@@ -6,7 +6,7 @@ services:
     name: office-assistant-api
     runtime: docker
     plan: free                 # sleeps after ~15 idle minutes; "starter" keeps it always on
-    region: frankfurt          # put the Neon database in AWS Frankfurt (eu-central-1) too
+    region: virginia           # next to the Neon database (AWS us-east-1)
     branch: cloud-upgrade
     rootDir: backend
     dockerfilePath: ./backend/Dockerfile
