@@ -47,3 +47,31 @@ def test_missing_optional_services_are_warnings():
 
 def test_development_is_not_checked():
     assert production_problems(get_settings()) == ([], [])
+
+
+def _start_module():
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "start.py"
+    spec = importlib.util.spec_from_file_location("start_script", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_app_link_is_derived_from_the_owner_link():
+    env = {"MIGRATIONS_DATABASE_URL": "postgresql://owner:o-pw@ep-x.eu-central-1.aws.neon.tech/neondb?sslmode=require",
+           "APP_ROLE_PASSWORD": "a/b+c=d@e"}
+    _start_module().prepare_database_urls(env)
+    assert env["MIGRATIONS_DATABASE_URL"].startswith("postgresql+psycopg://owner:o-pw@ep-x.")
+    assert env["DATABASE_URL"] == ("postgresql+psycopg://office_app:a%2Fb%2Bc%3Dd%40e"
+                                   "@ep-x.eu-central-1.aws.neon.tech/neondb?sslmode=require")
+
+
+def test_an_explicit_app_link_is_kept():
+    env = {"MIGRATIONS_DATABASE_URL": "postgres://owner:pw@h/db", "APP_ROLE_PASSWORD": "x",
+           "DATABASE_URL": "postgres://office_app:other@h2/db"}
+    _start_module().prepare_database_urls(env)
+    assert env["DATABASE_URL"] == "postgresql+psycopg://office_app:other@h2/db"
+    assert env["MIGRATIONS_DATABASE_URL"] == "postgresql+psycopg://owner:pw@h/db"

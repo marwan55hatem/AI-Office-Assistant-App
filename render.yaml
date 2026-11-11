@@ -1,0 +1,46 @@
+# Render Blueprint for the online service (docs/PRODUCTION.md, section 3).
+# Render: New -> Blueprint -> this repository, branch cloud-upgrade. Render asks for the values marked
+# "sync: false" once; the secrets marked "generateValue" are created by Render and never leave it.
+services:
+  - type: web
+    name: office-assistant-api
+    runtime: docker
+    plan: free                 # sleeps after ~15 idle minutes; "starter" keeps it always on
+    region: frankfurt          # put the Neon database in AWS Frankfurt (eu-central-1) too
+    branch: cloud-upgrade
+    rootDir: backend
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health/ready
+    autoDeploy: true
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      # Neon's owner connection string ("Direct connection", not the pooler), pasted as Neon shows it.
+      # scripts/start.py runs the migrations with it and builds DATABASE_URL for the restricted
+      # office_app role from it and APP_ROLE_PASSWORD.
+      - key: MIGRATIONS_DATABASE_URL
+        sync: false
+      - key: APP_ROLE_PASSWORD
+        generateValue: true
+      - key: JWT_SECRET
+        generateValue: true
+      # copy this value to the website's WEB_PROXY_SECRET on Vercel
+      - key: WEB_PROXY_SECRET
+        generateValue: true
+      # the website's https address, e.g. ["https://office-assistant-web.vercel.app"]
+      - key: CORS_ORIGINS
+        sync: false
+      # the same address without brackets, e.g. https://office-assistant-web.vercel.app
+      - key: APP_LINK_URL
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: EMAIL_PROVIDER
+        value: resend
+      # Resend's test sender reaches only the Resend account's own address; use a verified domain
+      # (Office Assistant <no-reply@your-domain>) to e-mail everyone.
+      - key: EMAIL_FROM
+        value: Office Assistant <onboarding@resend.dev>
+      - key: RESEND_API_KEY
+        sync: false
