@@ -12,7 +12,7 @@ from datetime import date, datetime, time
 LANGUAGES = ("en", "ar")
 TEMPLATES = ("task_urgent", "meeting_invite", "meeting_changed", "meeting_cancelled", "meeting_request_new",
              "meeting_request_accepted", "meeting_request_declined", "meeting_request_rescheduled",
-             "meeting_request_cancelled", "chat_unread", "test")
+             "meeting_request_cancelled", "chat_unread", "password_reset", "test")
 #: templates without an "Open" link (there is nothing left to open)
 NO_LINK = ("meeting_cancelled", "meeting_request_cancelled")
 
@@ -35,6 +35,10 @@ TEXT = {
         "test.lead": "This is a test e-mail from Office Assistant. If you can read it, e-mail is set up correctly.",
         "label.task": "Task", "label.meeting": "Meeting", "label.due": "Due", "label.when": "When",
         "label.who": "From",
+        "password_reset.subject": "Reset your Office Assistant password",
+        "password_reset.lead": "Someone asked to reset the password of your Office Assistant account. The link below works once, for {minutes} minutes.",
+        "password_reset.button": "Choose a new password",
+        "password_reset.footer": "Did not ask for this? Ignore this e-mail: your password stays the same.",
         "chat_unread.subject": "New message from {who}",
         "chat_unread.lead": "{who} sent you a message in Office Assistant. Open the app to read it and reply.",
         "label.topic": "Topic", "label.times": "Proposed times", "label.note": "Note", "label.reason": "Reason",
@@ -68,6 +72,10 @@ TEXT = {
         "test.lead": "هذه رسالة تجريبية من Office Assistant. إذا وصلتك فإعداد البريد يعمل بشكل صحيح.",
         "label.task": "المهمة", "label.meeting": "الاجتماع", "label.due": "موعد التسليم", "label.when": "الموعد",
         "label.who": "من",
+        "password_reset.subject": "إعادة تعيين كلمة مرور Office Assistant",
+        "password_reset.lead": "طلب أحدهم إعادة تعيين كلمة مرور حسابك في Office Assistant. يعمل الرابط أدناه مرة واحدة، ولمدة {minutes} دقيقة.",
+        "password_reset.button": "اختر كلمة مرور جديدة",
+        "password_reset.footer": "لم تطلب ذلك؟ تجاهل هذه الرسالة، وستبقى كلمة مرورك كما هي.",
         "chat_unread.subject": "رسالة جديدة من {who}",
         "chat_unread.lead": "أرسل لك {who} رسالة في Office Assistant. افتح التطبيق لقراءتها والرد عليها.",
         "label.topic": "الموضوع", "label.times": "المواعيد المقترحة", "label.note": "ملاحظة", "label.reason": "السبب",
@@ -93,7 +101,7 @@ PATHS = {"task_urgent": "/tasks", "meeting_invite": "/calendar", "meeting_change
          "meeting_cancelled": "/calendar", "test": "", "meeting_request_new": "/meetings",
          "meeting_request_accepted": "/meetings", "meeting_request_declined": "/meetings",
          "meeting_request_rescheduled": "/meetings", "meeting_request_cancelled": "/meetings",
-         "chat_unread": "/messages"}
+         "chat_unread": "/messages", "password_reset": ""}
 
 
 @dataclass(frozen=True)
@@ -139,7 +147,7 @@ def render(template: str, language: str, payload: dict, recipient_name: str, lin
     title = (payload.get("title") or "")[:200]
     who = (payload.get("who") or "")[:120]
     subject = t[f"{template}.subject"].format(title=title, who=who).replace("\n", " ")
-    lead = t[f"{template}.lead"].format(who=who)
+    lead = t[f"{template}.lead"].format(who=who, minutes=payload.get("minutes", 30))
     rows = []
     if template == "task_urgent":
         rows = [(t["label.task"], title),
@@ -160,11 +168,17 @@ def render(template: str, language: str, payload: dict, recipient_name: str, lin
                 (t["label.who"], who)]
     link = link_base.rstrip("/") + PATHS[template] if template not in NO_LINK else ""
     footer = t["footer.urgent"] if template == "task_urgent" else (t["footer.optional"] if template != "test" else "")
+    button_text, app_hint = t["open"], t["app_hint"]
+    if template == "password_reset":
+        path = str(payload.get("path") or "")
+        # a path on the website only (never another host)
+        link = link_base.rstrip("/") + path if path.startswith("/") and not path.startswith("//") else ""
+        footer, button_text, app_hint = t["password_reset.footer"], t["password_reset.button"], ""
 
     lines = [t["hello"].format(name=recipient_name), "", lead, ""]
     lines += [f"{label}: {value}" for label, value in rows]
     if link:
-        lines += ["", f"{t['open']}: {link}", t["app_hint"]]
+        lines += ["", f"{button_text}: {link}"] + ([app_hint] if app_hint else [])
     if footer:
         lines += ["", footer]
     text = "\n".join(lines).strip() + "\n"
@@ -181,8 +195,8 @@ def render(template: str, language: str, payload: dict, recipient_name: str, lin
         for label, value in rows)
     details = f'<table style="border-collapse:collapse">{table}</table>' if rows else ""
     button = (f'<p style="margin:24px 0 8px"><a href="{e(link, quote=True)}" style="background:#1e40af;color:#ffffff;'
-              f'padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">{e(t["open"])}</a></p>'
-              f'<p style="margin:0;color:#6b7280;font-size:13px">{e(t["app_hint"])}</p>') if link else ""
+              f'padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">{e(button_text)}</a></p>'
+              + (f'<p style="margin:0;color:#6b7280;font-size:13px">{e(app_hint)}</p>' if app_hint else "")) if link else ""
     foot = (f'<p style="margin:28px 0 0;padding-top:16px;border-top:1px solid #e5e7eb;color:#6b7280;font-size:12px">'
             f'{e(footer)}</p>') if footer else ""
     body = (f'<!DOCTYPE html><html lang="{language}" dir="{direction}"><head><meta charset="utf-8">'

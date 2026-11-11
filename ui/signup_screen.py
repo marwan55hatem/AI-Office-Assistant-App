@@ -32,7 +32,7 @@ from ui.auth_form import (
 
 logger = logging.getLogger(__name__)
 
-MIN_PASSWORD_LENGTH = 8
+MIN_PASSWORD_LENGTH = 10       # same rule as the online server
 #: an invite link ends in ``...invite=<token>`` or ``.../join/<token>``
 _INVITE = re.compile(r"(?:invite=|/join/)([A-Za-z0-9_-]{20,})")
 

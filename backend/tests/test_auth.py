@@ -182,3 +182,79 @@ def test_the_website_may_pass_on_the_visitor_ip_only_with_the_secret(client, mon
     # a made-up header without the secret is ignored: the real address counts
     fake = {"x-client-ip": "198.51.100.9", "x-web-proxy-secret": "wrong"}
     assert [attempt(i, fake) for i in range(3)] == [401, 401, 429]
+
+
+# ---------------------------------------------------------------- password rules and reset (website build)
+def test_new_passwords_need_ten_characters(client):
+    short = client.post("/auth/register-company", json={"company_name": "Acme", "owner_name": "Boss",
+                                                        "email": "boss@acme-corp.com", "password": "nine-char"})
+    assert short.status_code == 422
+    ok = client.post("/auth/register-company", json={"company_name": "Acme", "owner_name": "Boss",
+                                                     "email": "boss@acme-corp.com", "password": "ten-chars!"})
+    assert ok.status_code == 201
+
+
+def _reset_link(owner_engine):
+    from sqlalchemy import text as sql
+    with owner_engine.connect() as c:
+        row = c.execute(sql("SELECT payload, urgent, status FROM email_log WHERE template = 'password_reset' "
+                            "ORDER BY id DESC LIMIT 1")).first()
+    return row
+
+
+def test_password_reset_flow(client, owner_engine):
+    from app.services.email.providers import FakeProvider
+    from app.services.email.worker import process_due
+
+    tokens = register(client)
+    answer = client.post("/auth/password/forgot", json={"email": "BOSS@acme-corp.com"})
+    assert answer.status_code == 202
+    unknown = client.post("/auth/password/forgot", json={"email": "nobody@acme-corp.com"})
+    assert unknown.status_code == 202 and unknown.json() == answer.json()          # no account discovery
+    payload, urgent, status = _reset_link(owner_engine)
+    assert urgent and status == "queued" and payload["path"].startswith("/en/reset-password?token=")
+    token = payload["path"].split("token=")[1]
+
+    fake = FakeProvider()
+    assert process_due(fake) == {"sent": 1}
+    mail = fake.sent[0]
+    assert mail.subject == "Reset your Office Assistant password"
+    assert f"https://app.example.test/en/reset-password?token={token}" in mail.text
+    assert "30 minutes" in mail.text and "Choose a new password" in mail.html
+    assert _reset_link(owner_engine)[0] == {}                                       # the link is not kept
+
+    assert client.post("/auth/password/reset", json={"token": token, "new_password": "short"}).status_code == 422
+    assert client.post("/auth/password/reset", json={"token": token, "new_password": "a brand new secret"}).status_code == 204
+    assert login(client, "boss@acme-corp.com").status_code == 401                    # the old one is gone
+    assert login(client, "boss@acme-corp.com", "a brand new secret").status_code == 200
+    # the link works once, and the reset signed out every session
+    again = client.post("/auth/password/reset", json={"token": token, "new_password": "yet another secret"})
+    assert again.status_code == 400 and "invalid or has expired" in again.json()["detail"]
+    assert client.post("/auth/refresh", json={"refresh_token": tokens["refresh_token"]}).status_code == 401
+
+
+def test_only_the_newest_reset_link_works_and_links_expire(client, owner_engine):
+    from sqlalchemy import text as sql
+
+    register(client)
+    client.post("/auth/password/forgot", json={"email": "boss@acme-corp.com"})
+    first = _reset_link(owner_engine)[0]["path"].split("token=")[1]
+    client.post("/auth/password/forgot", json={"email": "boss@acme-corp.com"})
+    second = _reset_link(owner_engine)[0]["path"].split("token=")[1]
+    assert client.post("/auth/password/reset", json={"token": first, "new_password": "a brand new secret"}).status_code == 400
+    with owner_engine.begin() as c:
+        c.execute(sql("UPDATE password_resets SET expires_at = now() - interval '1 minute'"))
+    assert client.post("/auth/password/reset", json={"token": second, "new_password": "a brand new secret"}).status_code == 400
+    assert client.post("/auth/password/reset", json={"token": "x" * 43, "new_password": "a brand new secret"}).status_code == 400
+
+
+def test_arabic_reset_email_and_disabled_accounts(client, owner_engine):
+    tokens = register(client)
+    client.patch("/users/me/preferences", json={"language": "ar"}, headers=auth(tokens))
+    client.post("/auth/password/forgot", json={"email": "boss@acme-corp.com"})
+    assert _reset_link(owner_engine)[0]["path"].startswith("/ar/reset-password?token=")
+    _employee_tokens, employee_id = add_active_employee(client, tokens, "anna@acme-corp.com")
+    client.patch(f"/users/{employee_id}/status", json={"status": "disabled"}, headers=auth(tokens))
+    before = _reset_link(owner_engine)
+    client.post("/auth/password/forgot", json={"email": "anna@acme-corp.com"})
+    assert _reset_link(owner_engine) == before                                      # nothing for a disabled account

@@ -95,8 +95,16 @@ def find_invite(session: Session, token_hash: str):
     return session.execute(text("SELECT * FROM auth_find_invite(:h)"), {"h": token_hash}).first()
 
 
+def find_password_reset(session: Session, token_hash: str):
+    return session.execute(text("SELECT * FROM auth_find_password_reset(:h)"), {"h": token_hash}).first()
+
+
 def email_taken(session: Session, email: str) -> bool:
     return bool(session.execute(text("SELECT auth_email_taken(:email)"), {"email": email}).scalar())
+
+
+class PasswordResetRepository(TenantRepository[models.PasswordReset]):
+    model = models.PasswordReset
 
 
 class SessionAppRepository(TenantRepository[models.SessionApp]):

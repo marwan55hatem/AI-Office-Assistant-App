@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     access_token_minutes: int = 15
     refresh_token_days: int = 30
     invite_days: int = 7
+    password_reset_minutes: int = 30
 
     #: The website origin allowed by CORS (the desktop app does not need CORS).
     cors_origins: list[str] = ["http://localhost:3000"]

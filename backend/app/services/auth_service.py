@@ -1,4 +1,6 @@
-"""Accounts: company registration, login, token refresh with rotation, logout, joining."""
+"""Accounts: company registration, login, token refresh with rotation, logout, joining,
+password reset."""
+import hashlib
 import secrets
 import string
 import uuid
@@ -158,6 +160,56 @@ def join(full_name: str, email: str, password: str, invite_token: str | None, co
                 invites.update(invites.get(invite.id), used_at=datetime.now(UTC), used_by=user.id)
     except IntegrityError:
         raise AuthError("This e-mail address is already registered", 409) from None
+
+
+RESET_INVALID = "This link is invalid or has expired. Ask for a new one."
+
+
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def request_password_reset(email: str) -> None:
+    """E-mail a one-time reset link to an active account. Says nothing about whether the
+    address exists (the caller always answers the same)."""
+    from app.services.email.outbox import queue_email
+
+    with transaction(None) as session:
+        found = repos.find_login(session, email)
+    if found is None or found.status != "active":
+        return
+    settings = get_settings()
+    token = secrets.token_urlsafe(32)
+    with transaction(found.company_id) as session:
+        user = repos.UserRepository(session, found.company_id).get(found.id)
+        resets = repos.PasswordResetRepository(session, found.company_id)
+        now = datetime.now(UTC)
+        for old in resets.list(models.PasswordReset.user_id == user.id, models.PasswordReset.used_at.is_(None)):
+            resets.update(old, used_at=now)                    # only the newest link works
+        resets.add(user_id=user.id, token_hash=_token_hash(token),
+                   expires_at=now + timedelta(minutes=settings.password_reset_minutes))
+        # the link lives in the queued e-mail only until it is sent, then the payload is emptied
+        queue_email(session, found.company_id, user, "password_reset",
+                    {"title": "", "who": "", "path": f"/{user.language}/reset-password?token={token}",
+                     "minutes": settings.password_reset_minutes}, urgent=True)
+
+
+def reset_password(token: str, new_password: str) -> None:
+    """Use a reset link once: set the new password and sign the account out everywhere."""
+    with transaction(None) as session:
+        found = repos.find_password_reset(session, _token_hash(token))
+    now = datetime.now(UTC)
+    if found is None or found.used_at is not None or found.expires_at <= now:
+        raise AuthError(RESET_INVALID, 400)
+    with transaction(found.company_id) as session:
+        resets = repos.PasswordResetRepository(session, found.company_id)
+        reset = resets.get(found.id)
+        user = repos.UserRepository(session, found.company_id).get(found.user_id)
+        if reset is None or reset.used_at is not None or user is None or user.status != "active":
+            raise AuthError(RESET_INVALID, 400)
+        resets.update(reset, used_at=now)
+        repos.UserRepository(session, found.company_id).update(user, password_hash=security.hash_password(new_password))
+        repos.RefreshTokenRepository(session, found.company_id).revoke_all_for_user(user.id)
 
 
 def change_password(session, user: models.User, current_password: str, new_password: str) -> dict:

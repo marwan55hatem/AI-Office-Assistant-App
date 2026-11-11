@@ -49,7 +49,7 @@ export async function api<T>(path: string, method = "GET", body?: unknown): Prom
   return result;
 }
 
-export function authCall<T>(route: "login" | "register" | "join" | "logout" | "session" | "socket", body?: unknown) {
+export function authCall<T>(route: "login" | "register" | "join" | "logout" | "session" | "socket" | "forgot" | "reset", body?: unknown) {
   return call<T>(`/api/auth/${route}`, body === undefined && (route === "session" || route === "socket") ? "GET" : "POST", body);
 }
 

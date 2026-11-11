@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main, cloud-upgrade]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  website:
+    name: Website (lint, types, unit tests, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npx next typegen
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+        env:
+          API_URL: http://localhost:8766
+          SITE_URL: https://example.invalid
+
+  backend:
+    name: API (tests against PostgreSQL)
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:17
+        env:
+          POSTGRES_USER: office_owner
+          POSTGRES_PASSWORD: dev-owner-password
+          POSTGRES_DB: office
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U office_owner -d office"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      TEST_OWNER_URL: postgresql+psycopg://office_owner:dev-owner-password@localhost:5432/office
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pyflakes app tests scripts
+      - run: python -m pytest -q -p no:warnings

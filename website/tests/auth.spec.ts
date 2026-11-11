@@ -10,9 +10,11 @@ test("sign up a company, then go on to the download", async ({ page }) => {
   await page.getByLabel("E-mail").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Create company" }).click();
-  await expect(page).toHaveURL(/\/en\/app\/dashboard$/);
-  await expect(page.getByRole("heading", { level: 1, name: "Reports" })).toBeVisible();
+  await expect(page).toHaveURL(/\/en\/app$/);                                  // the portal overview
+  await expect(page.getByRole("heading", { level: 1, name: "Welcome, Sara Carter" })).toBeVisible();
   await expect(page.getByText("Northwind Studio · Manager")).toBeVisible();
+  await expect(page.getByTestId("download-card")).toBeVisible();
+  await expect(page.getByTestId("overview-members")).toContainText("0");
 
   // the session is in httpOnly cookies: page scripts cannot read it
   expect(await page.evaluate(() => document.cookie)).not.toContain("oa_rt");
@@ -39,13 +41,13 @@ test("sign out and sign in again; a wrong password is refused", async ({ page, r
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page).toHaveURL(/\/en\/signin/);
   await signIn(page, company.email);
-  await expect(page).toHaveURL(/\/en\/app\/dashboard$/);
+  await expect(page).toHaveURL(/\/en\/app$/);
 });
 
 test("sign in in Arabic", async ({ page, request }) => {
   const company = await apiCompany(request);
   await signIn(page, company.email, "ar");
-  await expect(page.getByRole("heading", { level: 1, name: "التقارير" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "أهلاً، Sara Carter" })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
 });
 
@@ -72,7 +74,8 @@ test("an employee joins with the code, the manager approves on the web", async (
   await expect(boss.getByText("Nobody is waiting.")).toBeVisible();
 
   await signIn(visitor, employeeEmail);
-  await expect(visitor).toHaveURL(/\/en\/app\/meetings$/);                // employees land on meetings
+  await expect(visitor).toHaveURL(/\/en\/app$/);                         // employees land on the overview too
+  await expect(visitor.getByTestId("overview-members")).toHaveCount(0);  // ...without the manager's cards
   await expect(visitor.getByRole("link", { name: "Employees" })).toHaveCount(0);
   await visitor.goto("/en/app/dashboard");                                 // managers only
   await expect(visitor).toHaveURL(/\/en\/app\/meetings$/);

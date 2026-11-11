@@ -131,7 +131,7 @@ function RequestCard({ request, onChanged }: { request: Request; onChanged: (mes
       <div className="row">
         <h3 id={`${id}-topic`} style={{ margin: 0 }}>{request.topic}</h3>
         <span className="spacer" />
-        <span className={`pill pill-${request.status}`}>{m.status[request.status]}</span>
+        <span className={`pill-status pill-${request.status}`}>{m.status[request.status]}</span>
       </div>
       <p className="hint">
         {manager ? `${m.from} ${request.requested_by_name}` : `${m.to} ${request.manager_name ?? m.yourManager}`} · {request.duration_minutes} {m.minutes}

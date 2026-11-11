@@ -66,6 +66,7 @@ export function AppShell({ lang, t, children }: { lang: Locale; t: Dict; childre
 
   const manager = me.user.role === "manager";
   const items: [string, string, number][] = [
+    ["", t.app.nav.overview, 0],
     ...(manager ? ([["dashboard", t.app.nav.dashboard, 0], ["employees", t.app.nav.employees, 0]] as [string, string, number][]) : []),
     ["meetings", t.app.nav.meetings, badges.meetings],
     ["messages", t.app.nav.messages, badges.messages],
@@ -81,31 +82,21 @@ export function AppShell({ lang, t, children }: { lang: Locale; t: Dict; childre
             {me.company.name} · {manager ? t.app.manager : t.app.employee}
           </div>
           {items.map(([key, label, count]) => {
-            const href = `/${lang}/app/${key}`;
+            const href = key ? `/${lang}/app/${key}` : `/${lang}/app`;
+            const current = key ? pathname.startsWith(href) : pathname === href;
             return (
-              <Link key={key} href={href} aria-current={pathname.startsWith(href) ? "page" : undefined}>
+              <Link key={key || "overview"} href={href} aria-current={current ? "page" : undefined}>
                 <span>{label}</span>
                 {count > 0 ? <span className="badge" aria-label={`${count}`}>{count}</span> : null}
               </Link>
             );
           })}
           <button className="btn btn-small" style={{ marginTop: 12 }} onClick={() => void signOut()}>{t.app.nav.signOut}</button>
-          {!manager ? <p className="hint" style={{ padding: "8px 12px" }}>{t.app.getApp} <Link href={`/${lang}/download`}>{t.nav.download}</Link></p> : null}
         </nav>
         <div>{children}</div>
       </div>
     </Context.Provider>
   );
-}
-
-/** Sends a manager to the reports and an employee to meetings. */
-export function AppHome() {
-  const { me, lang } = useApp();
-  const router = useRouter();
-  useEffect(() => {
-    router.replace(`/${lang}/app/${me.user.role === "manager" ? "dashboard" : "meetings"}`);
-  }, [me, lang, router]);
-  return null;
 }
 
 /** For manager-only pages. */

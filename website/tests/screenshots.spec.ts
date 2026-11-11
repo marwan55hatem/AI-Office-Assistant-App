@@ -8,12 +8,16 @@ test.skip(!process.env.SCREENSHOTS, "set SCREENSHOTS=1 to make the screenshots")
 const OUT = "../screenshots_redesign/cloud/phase8_";
 
 test("public pages", async ({ page }) => {
-  await page.setViewportSize({ width: 1366, height: 900 });
-  for (const theme of ["light", "dark"] as const) {
-    await page.emulateMedia({ colorScheme: theme });
-    await page.goto("/en");
-    await page.screenshot({ path: `${OUT}home_${theme}.png`, fullPage: true });
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const theme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme: theme });
+      await page.goto("/en");
+      await page.waitForTimeout(800);
+      await page.screenshot({ path: `${OUT}home_${theme}${width === 390 ? "_390" : ""}.png`, fullPage: true });
+    }
   }
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.emulateMedia({ colorScheme: "light" });
   await page.goto("/ar");
   await page.screenshot({ path: `${OUT}home_ar_rtl.png`, fullPage: true });
@@ -23,6 +27,10 @@ test("public pages", async ({ page }) => {
   await page.screenshot({ path: `${OUT}privacy_ar.png`, fullPage: true });
   await page.goto("/en/signup");
   await page.screenshot({ path: `${OUT}signup.png` });
+  await page.goto("/en/forgot-password");
+  await page.screenshot({ path: `${OUT}forgot_password.png` });
+  await page.goto("/en/no-such-page");
+  await page.screenshot({ path: `${OUT}not_found.png` });
 });
 
 test("signed-in pages", async ({ browser, request }) => {
@@ -50,6 +58,8 @@ test("signed-in pages", async ({ browser, request }) => {
   const context = await browser.newContext({ viewport: { width: 1366, height: 900 } });
   const page = await context.newPage();
   await signIn(page, company.email);
+  await page.waitForLoadState("networkidle");
+  await page.screenshot({ path: `${OUT}portal_overview.png`, fullPage: true });
   for (const theme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: theme });
     await page.goto("/en/app/dashboard");

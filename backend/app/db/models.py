@@ -38,7 +38,7 @@ def _created():
 TENANT_TABLES = (
     "users", "refresh_tokens", "invites", "sessions", "events", "tasks", "calendar_events",
     "calendar_attendees", "documents", "ai_usage", "meeting_requests", "messages",
-    "notifications", "email_log", "ai_chats", "ai_messages", "session_apps",
+    "notifications", "email_log", "ai_chats", "ai_messages", "session_apps", "password_resets",
 )
 
 
@@ -105,6 +105,19 @@ class Invite(Base):
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     used_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     __table_args__ = (_user_fk("created_by", "fk_invites_created_by"),)
+
+
+class PasswordReset(Base):
+    """A one-time password-reset link. Only the token's SHA-256 is stored."""
+    __tablename__ = "password_resets"
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    company_id: Mapped[uuid.UUID] = _company_id()
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    created_at: Mapped[datetime] = _created()
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (_user_fk("user_id", "fk_password_resets_user"),)
 
 
 class WorkSession(Base):

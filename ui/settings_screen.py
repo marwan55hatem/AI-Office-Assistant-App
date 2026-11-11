@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 APP_NAME = "Desktop AI Office Assistant"
 APP_VERSION = "1.0.0"
-MIN_PASSWORD_LENGTH = 8
+MIN_PASSWORD_LENGTH = 10       # same rule as the online server
 CONTENT_MAX_WIDTH = 920
 
 

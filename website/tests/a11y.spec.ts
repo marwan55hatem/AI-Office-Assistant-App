@@ -3,7 +3,8 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { apiCompany, apiEmployee, apiSessions, signIn } from "./helpers";
 
-const PUBLIC = ["", "/how-it-works", "/features", "/privacy", "/download", "/faq", "/signin", "/signup"];
+const PUBLIC = ["", "/how-it-works", "/features", "/privacy", "/download", "/faq", "/signin", "/signup",
+  "/forgot-password", "/reset-password", "/no-such-page"];
 
 async function audit(page: Page, label: string) {
   const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
@@ -33,8 +34,8 @@ for (const theme of ["light", "dark"] as const) {
     await apiSessions(request, anna.headers, 0.8);
     await page.emulateMedia({ colorScheme: theme });
     await signIn(page, company.email);
-    for (const path of ["dashboard", "employees", "meetings", "messages"]) {
-      await page.goto(`/en/app/${path}`);
+    for (const path of ["", "/dashboard", "/employees", "/meetings", "/messages"]) {
+      await page.goto(`/en/app${path}`);
       await expect(page.locator("h1")).toBeVisible();
       await page.waitForLoadState("networkidle");
       await audit(page, `/en/app/${path} ${theme}`);

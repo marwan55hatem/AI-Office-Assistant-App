@@ -1,9 +1,8 @@
 import "server-only";
 
-export const REPO_SLUG = "marwan55hatem/AI-Office-Assistant-App";
+import type { Release } from "@/lib/release-types";
 
-export type Asset = { name: string; size: number; url: string };
-export type Release = { version: string; published: string; url: string; assets: Asset[] };
+export const REPO_SLUG = process.env.GITHUB_REPO ?? "marwan55hatem/AI-Office-Assistant-App";
 
 type GitHubRelease = {
   tag_name: string;
@@ -13,43 +12,36 @@ type GitHubRelease = {
 };
 
 /**
- * The latest GitHub release, cached for an hour (GitHub allows 60 anonymous calls an hour
- * per address; set GITHUB_TOKEN to raise that). Returns null when GitHub cannot be reached,
- * and the page then links to the releases page instead.
+ * The latest release, cached for an hour (GitHub allows 60 anonymous calls an hour per address;
+ * GITHUB_TOKEN raises that).
+ * - a Release when one is published (DOWNLOAD_URL, if set, replaces the installer link);
+ * - null when there is no release yet (GitHub answers 404) and no DOWNLOAD_URL;
+ * - "unavailable" when GitHub cannot be reached.
  */
-export async function latestRelease(): Promise<Release | null> {
+export async function latestRelease(): Promise<Release | null | "unavailable"> {
+  const configured = process.env.DOWNLOAD_URL || null;
   const headers: Record<string, string> = { accept: "application/vnd.github+json", "user-agent": "office-assistant-website" };
   if (process.env.GITHUB_TOKEN) headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  let response: Response;
   try {
-    const response = await fetch(`https://api.github.com/repos/${REPO_SLUG}/releases/latest`, {
-      headers,
-      next: { revalidate: 3600 },
-      signal: AbortSignal.timeout(6000),
+    response = await fetch(`https://api.github.com/repos/${REPO_SLUG}/releases/latest`, {
+      headers, next: { revalidate: 3600 }, signal: AbortSignal.timeout(6000),
     });
-    if (!response.ok) return null;
-    const data = (await response.json()) as GitHubRelease;
-    return {
-      version: data.tag_name,
-      published: data.published_at,
-      url: data.html_url,
-      // the setup program first, then its data parts in order
-      assets: data.assets
-        .map((a) => ({ name: a.name, size: a.size, url: a.browser_download_url }))
-        .sort((a, b) => Number(b.name.endsWith(".exe")) - Number(a.name.endsWith(".exe")) || a.name.localeCompare(b.name)),
-    };
   } catch {
-    return null;
+    return configured ? manual(configured) : "unavailable";
   }
+  if (response.status === 404) return configured ? manual(configured) : null;
+  if (!response.ok) return configured ? manual(configured) : "unavailable";
+  const data = (await response.json()) as GitHubRelease;
+  const assets = data.assets
+    .map((a) => ({ name: a.name, size: a.size, url: a.browser_download_url }))
+    // the setup program first, then its data parts in order
+    .sort((a, b) => Number(b.name.endsWith(".exe")) - Number(a.name.endsWith(".exe")) || a.name.localeCompare(b.name));
+  const installer = configured ?? assets.find((a) => a.name.toLowerCase().endsWith(".exe"))?.url ?? null;
+  if (!installer) return null;
+  return { version: data.tag_name, published: data.published_at, url: data.html_url, installerUrl: installer, assets };
 }
 
-export function formatSize(bytes: number, locale: string): string {
-  const units = ["B", "KB", "MB", "GB"];
-  let value = bytes;
-  let unit = 0;
-  while (value >= 1000 && unit < units.length - 1) {
-    value /= 1000;
-    unit += 1;
-  }
-  const number = new Intl.NumberFormat(locale === "ar" ? "ar-u-nu-latn" : "en", { maximumFractionDigits: unit >= 3 ? 2 : 1 });
-  return `${number.format(value)} ${units[unit]}`;
+function manual(url: string): Release {
+  return { version: "", published: new Date().toISOString(), url: `https://github.com/${REPO_SLUG}/releases`, installerUrl: url, assets: [] };
 }

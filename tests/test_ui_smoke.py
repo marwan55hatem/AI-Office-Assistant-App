@@ -78,17 +78,21 @@ def test_signup_validates_and_stores_a_pending_request(app, db):
     assert done == [] and screen.error_label.text()
     screen.full_name_input.setText("New Person")
     screen.username_input.setText("newperson")
-    screen.password_input.setText("abcdefgh")
-    screen.confirm_input.setText("abcdefgh")
+    screen.password_input.setText("abcdefghij")
+    screen.confirm_input.setText("abcdefghij")
     screen.submit_button.click()                                    # no company code yet
     assert db.get_user_status("newperson", "employee") is None and screen.error_label.text()
     screen.code_input.setText("ab12cd34")
     screen.password_input.setText("abcd")
     screen.confirm_input.setText("abcd")
-    screen.submit_button.click()                                    # too short (8 needed)
+    screen.submit_button.click()                                    # too short (10 needed)
     assert db.get_user_status("newperson", "employee") is None
-    screen.password_input.setText("abcdefgh")
-    screen.confirm_input.setText("abcdefgh")
+    screen.password_input.setText("abcdefghi")                      # 9: still too short
+    screen.confirm_input.setText("abcdefghi")
+    screen.submit_button.click()
+    assert db.get_user_status("newperson", "employee") is None
+    screen.password_input.setText("abcdefghij")
+    screen.confirm_input.setText("abcdefghij")
     screen.submit_button.click()
     assert db.get_user_status("newperson", "employee") == "pending"
 

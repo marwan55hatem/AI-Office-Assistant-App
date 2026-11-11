@@ -37,7 +37,7 @@ export async function signIn(page: Page, email: string, lang = "en") {
   await page.getByLabel(lang === "en" ? "E-mail" : "البريد الإلكتروني").fill(email);
   await page.getByLabel(lang === "en" ? "Password" : "كلمة المرور", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: lang === "en" ? "Sign in" : "تسجيل الدخول", exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`/${lang}/app/`));
+  await expect(page).toHaveURL(new RegExp(`/${lang}/app(/|$|\\?)`));
 }
 
 /** A few days of work sessions for an employee, so the reports have data. */

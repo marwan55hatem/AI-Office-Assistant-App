@@ -280,3 +280,12 @@ def test_the_socket_closes_when_the_token_expires(client, team, monkeypatch):
         with pytest.raises(WebSocketDisconnect) as closed:
             ws.receive_json()
         assert closed.value.code == 4001 and time.monotonic() - started < 10
+
+
+def test_pages_of_other_sites_cannot_open_the_live_channel(client, team):
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect("/chat/ws", headers={"origin": "https://evil.example"}) as ws:
+            ws.receive_json()
+    with client.websocket_connect("/chat/ws", headers={"origin": "http://localhost:3000"}) as ws:   # the website
+        ws.send_json({"type": "auth", "token": team["anna"]["access_token"]})
+        assert ws.receive_json()["type"] == "ready"

@@ -325,7 +325,14 @@ def _typing_targets(company_id, user_id, role, employee_id) -> list | None:
 async def live(socket: WebSocket):
     """Authenticate with the first message ``{"type": "auth", "token": <access token>}``
     (never in the URL, which ends up in logs). The connection is closed when the token
-    expires (code 4001); the client reconnects with a fresh one."""
+    expires (code 4001); the client reconnects with a fresh one.
+
+    Browsers always send their page's Origin: a page of another site is refused (only the
+    website's origins in CORS_ORIGINS may connect). The desktop app sends no Origin."""
+    origin = socket.headers.get("origin")
+    if origin and origin.rstrip("/") not in {o.rstrip("/") for o in get_settings().cors_origins}:
+        await socket.close(code=4003)
+        return
     await socket.accept()
     try:
         first = await asyncio.wait_for(socket.receive_json(), timeout=AUTH_SECONDS)

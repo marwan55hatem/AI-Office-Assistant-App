@@ -355,3 +355,50 @@ let the database pick "today" (UTC) and failed near midnight.
 
 **Still open**: the preview deployment needs a Vercel account and a publicly reachable API (Phase 9
 deploys the API); error messages that come from the API are in English on the Arabic site.
+
+## Website redesign and portal (Website_Build_Prompt.md, Design E)
+
+**Design**: the site now follows **Design E "Spotlight Bento"** (`DesignE_dark.html` / `DesignE_light.html`),
+compared with the references at 1440 px and 390 px in both themes: dot grid, sweeping spotlight, light-theme
+blobs, rotating-beam cards, pill, gradient headings, the manager-report mock, the 6-card bento, live feed,
+3 steps, privacy strip and call to action. Manrope + IBM Plex Mono + IBM Plex Sans Arabic via `next/font`.
+Dark is the default; the system setting is followed on the first visit and the choice is remembered.
+Motion stops for `prefers-reduced-motion` and while the tab is hidden; phones get the backdrop without
+blur filters. The mock and the feed are labelled as example data. Arabic copy rewritten naturally, with the
+Arabic project name المساعد المكتبي الذكي; the language choice is remembered.
+Deliberate differences: some label colours are a little darker than the references (WCAG AA contrast), two
+claims reworded to stay accurate ("each company's data is kept apart", "sync to your company's account"),
+and the brief's Tailwind / next-intl / next-themes were not adopted — the existing tested theme and i18n
+code already met every requirement (see `website/README.md`).
+
+**New**
+- **Forgot / reset password** (API + site): one-time link, stored only as a hash, valid 30 minutes, newest
+  link only, always the same answer (no account discovery), signs the account out everywhere; always-sent
+  e-mail in English or Arabic. Migration `0006_password_resets` (RLS + a SECURITY DEFINER lookup).
+- **New passwords need 10 characters** (API, website, desktop app; existing passwords keep working).
+- **Portal overview**: company, profile, desktop download card, members and approval status, and what waits
+  for you (meetings, unread messages, this week's team focus).
+- **Download**: disabled button with the reason when no release exists, `DOWNLOAD_URL` override, install steps.
+- Styled **404 and error pages**; Open Graph image; canonical and hreflang (en/ar/x-default) per page.
+- **Security**: a strict Content Security Policy with a fresh nonce on every page; the chat's WebSocket now
+  refuses pages of other sites (Origin not in `CORS_ORIGINS`); every external link opens with
+  `noopener noreferrer`; client and server form checks with errors announced to screen readers.
+- **CI** (`.github/workflows/ci.yml`): website lint, type-check, unit tests, build; API tests on PostgreSQL.
+  `website/PROGRESS.md` tracks the brief.
+
+**Tests**
+- Website: 36 Playwright end-to-end tests (all pass), incl. password reset through the real e-mail queue,
+  form errors, 404, CSP, console errors, phone menu with no sideways scroll, and axe (WCAG 2.2 AA) on every
+  public and portal page in English/Arabic and light/dark with no serious or critical problems. 28 unit
+  tests (Vitest + Testing Library): forms, API client, validation, languages (Arabic has exactly the English
+  keys), download card states, CSP.
+- API: 218 passed (1 skipped), incl. password reset, the 10-character rule, the WebSocket origin check, and
+  `password_resets` in the isolation sweep. Desktop: 241 passed.
+- Lighthouse (local production build, simulated devices): desktop performance 96–100 and accessibility /
+  best practices / SEO 100; mobile Home 84–93 (English, three runs; was 61 before the phone backdrop) and
+  86–87 (Arabic), accessibility / best practices / SEO 100.
+- Screenshots: `screenshots_redesign/cloud/phase8_*` (home 1440/390 light/dark, Arabic, download, portal,
+  reports light/dark, meetings, messages, sign-up, forgot password, 404).
+
+**Still open**: the preview deployment (Vercel + a public API) needs the owner's accounts (Phase 9); the CI
+workflow runs once the branch is pushed; API error messages stay English on the Arabic site.

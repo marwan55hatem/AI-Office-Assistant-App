@@ -54,6 +54,8 @@ def seed_every_table(owner_engine, company_id, manager_id, employee_id) -> dict:
         "INSERT INTO invites (id, company_id, token_hash, created_by, expires_at) "
         "VALUES (:invite, :c, md5(random()::text) || md5(random()::text), :m, now() + interval '1 day')",
         "INSERT INTO refresh_tokens (id, company_id, user_id, expires_at) VALUES (:refresh, :c, :e, now() + interval '1 day')",
+        "INSERT INTO password_resets (id, company_id, user_id, token_hash, expires_at) "
+        "VALUES (gen_random_uuid(), :c, :e, md5(random()::text) || md5(random()::text), now() + interval '1 hour')",
     ]
     with owner_engine.begin() as connection:
         for statement in statements:

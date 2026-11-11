@@ -8,8 +8,8 @@ from app.core.deps import CurrentUser
 from app.core.ratelimit import login_limiter
 from app.repositories.tenant import CompanyRepository
 from app.schemas.auth import (
-    CompanyOut, Join, JoinResult, Login, MeOut, PasswordChange, RefreshRequest, RegisterCompany, TokenPair,
-    UserOut,
+    CompanyOut, Join, JoinResult, Login, MeOut, PasswordChange, PasswordForgot, PasswordReset, RefreshRequest,
+    RegisterCompany, TokenPair, UserOut,
 )
 from app.services import auth_service
 from app.services.auth_service import AuthError
@@ -93,6 +93,26 @@ def me(principal: CurrentUser):
     if not principal.is_manager:
         company_out.join_code = None          # only managers hand out the join code
     return MeOut(user=UserOut.model_validate(principal.user), company=company_out)
+
+
+FORGOT_ANSWER = {"detail": "If an account uses this address, we have sent it a link to choose a new password."}
+
+
+@router.post("/password/forgot", status_code=status.HTTP_202_ACCEPTED)
+def forgot_password(body: PasswordForgot, request: Request) -> dict:
+    """Always the same answer, so the endpoint cannot be used to find out who has an account."""
+    _limit(request, body.email, "reset")
+    auth_service.request_password_reset(body.email)
+    return FORGOT_ANSWER
+
+
+@router.post("/password/reset", status_code=status.HTTP_204_NO_CONTENT)
+def reset_password(body: PasswordReset, request: Request):
+    _limit(request, "reset-token", "reset-use")
+    try:
+        auth_service.reset_password(body.token, body.new_password)
+    except AuthError as error:
+        _fail(error)
 
 
 @router.post("/change-password", response_model=TokenPair)

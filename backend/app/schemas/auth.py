@@ -10,7 +10,8 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, model_validator
 
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
-Password = Annotated[str, Field(min_length=8, max_length=128)]
+#: at least 10 characters for new passwords (sign-in accepts any length, so older accounts keep working)
+Password = Annotated[str, Field(min_length=10, max_length=128)]
 Code = Annotated[str, StringConstraints(strip_whitespace=True, min_length=4, max_length=16, pattern=r"^[A-Za-z0-9]+$")]
 
 
@@ -110,6 +111,15 @@ class PreferencesUpdate(Strict):
     #: optional e-mails (meetings); urgent-task e-mails are always sent
     email_notifications: bool | None = None
     language: Literal["en", "ar"] | None = None
+
+
+class PasswordForgot(Strict):
+    email: EmailStr
+
+
+class PasswordReset(Strict):
+    token: Annotated[str, Field(min_length=20, max_length=200)]
+    new_password: Password
 
 
 class PasswordChange(Strict):

@@ -9,6 +9,7 @@ test("the manager's reports show the team's numbers", async ({ page, request }) 
   await apiSessions(request, anna.headers, 0.85);
   await apiSessions(request, ben.headers, 0.6);
   await signIn(page, company.email);
+  await page.goto("/en/app/dashboard");
   const kpis = page.getByTestId("kpis");
   await expect(kpis).toContainText("Focus");
   await expect(kpis.locator(".value").first()).not.toHaveText("0%");
@@ -41,6 +42,7 @@ test("meeting request: asked on the web, accepted on the web", async ({ browser,
   const anna = await apiEmployee(request, company, "Anna Hamdan");
   const employee = await (await browser.newContext()).newPage();
   await signIn(employee, anna.email);
+  await employee.goto("/en/app/meetings");
   await employee.getByLabel("Topic").fill("Moving to the platform team");
   await employee.getByLabel("Short note (optional)").fill("Ten minutes is enough");
   await employee.getByRole("button", { name: "+ Add another time" }).click();
@@ -89,6 +91,7 @@ test("the manager declines with a reason, and proposes other times", async ({ br
 
   const employee = await (await browser.newContext()).newPage();
   await signIn(employee, anna.email);
+  await employee.goto("/en/app/meetings");
   const mine = employee.getByTestId("meeting").filter({ hasText: "Holiday plan" });
   await expect(mine).toContainText("I'm away that week");
   await mine.getByRole("button", { name: "Accept selected time" }).click();
