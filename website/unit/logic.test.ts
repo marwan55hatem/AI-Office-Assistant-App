@@ -98,7 +98,7 @@ describe("content security policy", () => {
     expect(csp).toContain("script-src 'self' 'nonce-abc123' 'strict-dynamic'");
     expect(csp).toContain("frame-ancestors 'none'");
     expect(csp).toContain("object-src 'none'");
-    expect(csp).toMatch(/connect-src 'self' ws:\/\/localhost:8766/);
+    expect(csp).toMatch(/connect-src 'self' ws:\/\/127\.0\.0\.1:8766/);
     expect(csp).not.toContain("unsafe-eval");
   });
 });

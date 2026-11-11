@@ -36,7 +36,7 @@ export function proxy(request: NextRequest) {
 
 function socketOrigin(): string {
   const explicit = process.env.PUBLIC_API_WS_URL;
-  const api = explicit ?? (process.env.API_URL ?? "http://localhost:8766").replace(/^http/, "ws");
+  const api = explicit ?? (process.env.API_URL ?? "http://127.0.0.1:8766").replace(/^http/, "ws");
   try {
     return new URL(api).origin.replace(/^http/, "ws");
   } catch {

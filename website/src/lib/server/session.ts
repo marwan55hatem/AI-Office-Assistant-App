@@ -15,7 +15,7 @@ import { cookies } from "next/headers";
  * share one refresh call and its result.
  */
 
-export const API_URL = (process.env.API_URL ?? "http://localhost:8766").replace(/\/$/, "");
+export const API_URL = (process.env.API_URL ?? "http://127.0.0.1:8766").replace(/\/$/, "");
 const ACCESS = "oa_at";
 const REFRESH = "oa_rt";
 const REMEMBER = "oa_rem";

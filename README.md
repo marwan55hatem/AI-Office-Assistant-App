@@ -94,7 +94,7 @@ python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu130
 python tools/fetch_models.py               # the local models, once
 # the online service (needs Docker for PostgreSQL): see backend/README.md
-set OFFICE_API_URL=http://localhost:8000
+set OFFICE_API_URL=http://127.0.0.1:8000
 python main.py
 ```
 

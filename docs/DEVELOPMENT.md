@@ -21,7 +21,7 @@ of torch/torchvision instead (drop the `--extra-index-url`).
 ```bash
 # 1. the online service with its database (Docker): see backend/README.md
 # 2. the desktop app against it
-set OFFICE_API_URL=http://localhost:8000
+set OFFICE_API_URL=http://127.0.0.1:8000
 python main.py
 ```
 
@@ -29,7 +29,7 @@ Useful environment variables:
 
 | variable | effect |
 |---|---|
-| `OFFICE_API_URL=<url>` | the online service (default: the address the installer was built with, else `http://localhost:8000`) |
+| `OFFICE_API_URL=<url>` | the online service (default: the address the installer was built with, else `http://127.0.0.1:8000`; use 127.0.0.1, not localhost, which costs ~2 s per new connection on Windows) |
 | `OFFICE_BACKEND=local` | run against the old single-PC SQLite database instead of the service (development only) |
 | `OFFICE_LLM=0` | switch the AI Chat's online model off (answers only from your data) |
 | `OFFICE_DATA_DIR=<folder>` | use another folder for the outbox and logs |

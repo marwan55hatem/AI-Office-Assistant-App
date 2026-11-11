@@ -1,6 +1,6 @@
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
-export const API = process.env.API_URL ?? "http://localhost:8766";
+export const API = process.env.API_URL ?? "http://127.0.0.1:8766";
 export const PASSWORD = "correct horse battery";
 
 let counter = 0;

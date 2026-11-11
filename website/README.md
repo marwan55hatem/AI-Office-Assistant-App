@@ -50,7 +50,7 @@ in both languages and themes. The password-reset test reads the queued e-mail fr
 the API with `EMAIL_WORKER_ENABLED=0` and `CORS_ORIGINS=["http://localhost:3100"]`:
 ```bash
 npx playwright install chromium
-npm run build && API_URL=http://localhost:8766 ALLOW_INSECURE_COOKIES=1 npx next start -p 3100
+npm run build && API_URL=http://127.0.0.1:8766 ALLOW_INSECURE_COOKIES=1 npx next start -p 3100
 npm run test:e2e
 ```
 `SCREENSHOTS=1 npx playwright test tests/screenshots.spec.ts` refreshes the screenshots in

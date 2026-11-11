@@ -8,7 +8,7 @@ import os
 
 from app_paths import BUNDLE_DIR
 
-DEFAULT_API_URL = "http://localhost:8000"
+DEFAULT_API_URL = "http://127.0.0.1:8000"   # not "localhost": on Windows it tries IPv6 first, ~2 s per new connection
 SERVER_URL_FILE = os.path.join(BUNDLE_DIR, "server_url.txt")
 
 
