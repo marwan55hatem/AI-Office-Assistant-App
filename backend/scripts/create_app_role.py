@@ -32,22 +32,37 @@ def main() -> int:
     if not ROLE.replace("_", "").isalnum():
         print("APP_ROLE_NAME may contain only letters, digits and _", file=sys.stderr)
         return 2
-    engine = create_engine(owner_url)
+    try:
+        exists = _apply(create_engine(owner_url), password)
+    except Exception as exc:  # noqa: BLE001 -- the driver's message can contain the SQL, i.e. the password
+        code = getattr(getattr(exc, "orig", exc), "sqlstate", None) or "-"
+        print(f"role {ROLE}: failed ({type(exc).__name__}, SQLSTATE {code}); details withheld, they may "
+              "contain the password", file=sys.stderr)
+        return 1
+    print(f"role {ROLE}: {'updated' if exists else 'created'}, privileges granted")
+    return 0
+
+
+def _apply(engine, password: str) -> bool:
     with engine.begin() as connection:
         exists = connection.execute(text("SELECT 1 FROM pg_roles WHERE rolname = :r"), {"r": ROLE}).first()
-        verb = "ALTER" if exists else "CREATE"
+        # A new role gets its limits explicitly. An existing one only gets the new password: hosted
+        # databases (e.g. Neon) refuse ALTER ROLE with attribute clauses, so the limits are checked below.
+        sql = (f"ALTER ROLE {ROLE} WITH LOGIN PASSWORD %L" if exists else
+               f"CREATE ROLE {ROLE} LOGIN PASSWORD %L NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT")
         # the password goes through format(%L) on the server, so it is quoted safely
-        statement = connection.execute(text(
-            f"SELECT format('{verb} ROLE {ROLE} LOGIN PASSWORD %L "
-            "NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT', CAST(:pw AS text))"),
-            {"pw": password}).scalar()
+        statement = connection.execute(text("SELECT format(:sql, CAST(:pw AS text))"),
+                                       {"sql": sql, "pw": password}).scalar()
         connection.execute(text(statement))
+        unsafe = connection.execute(text(
+            "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = :r"), {"r": ROLE}).scalar()
+        if unsafe:
+            raise RuntimeError("the app role is a superuser or bypasses RLS")
         connection.execute(text(GRANTS))
         has_version = connection.execute(text("SELECT to_regclass('public.alembic_version')")).scalar()
         if has_version:
             connection.execute(text(f"REVOKE ALL ON alembic_version FROM {ROLE}"))
-    print(f"role {ROLE}: {'updated' if exists else 'created'}, privileges granted")
-    return 0
+    return bool(exists)
 
 
 if __name__ == "__main__":
