@@ -30,7 +30,7 @@ Step "Check models" { python tools/fetch_models.py --check }
 
 if (-not $SkipTests) {
     Step "pytest" { python -m pytest tests/ -q }
-    Step "Database self-test" { python database/db_manager.py }
+    Step "Database self-test (local mode)" { python -m database.db_manager }
 }
 
 Step "Application icon" { python tools/make_icon.py }
