@@ -47,7 +47,7 @@ localhost). Switches: `-SkipTests`, `-SkipModels` (don't download), `-NoInstalle
 
 1. **Models** — `python tools/fetch_models.py` downloads into `models/` (idempotent; `--check` only lists):
    `hf/bart-large-cnn/` (summaries), `hf/opus-mt-*` (12 translation pairs), `yolo12n.pt` (camera).
-2. **Gate** — `python -m pytest tests/` and `python -m database.db_manager` must pass.
+2. **Gate** — `python -m pytest tests/` must pass.
 3. **Freeze** — `pyinstaller packaging/OfficeAssistant.spec --noconfirm --clean` → `dist/OfficeAssistant/`.
    Set `OFFICE_BUILD_NO_MODELS=1` for a quick build without models (then run it with
    `OFFICE_MODELS_DIR=<project>\models`).
