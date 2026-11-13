@@ -45,12 +45,21 @@ hiddenimports = [
     "win32gui", "win32con", "win32api",
 ]
 
+# torchvision >= 0.29 keeps its compiled operators in _C_stable.pyd / image_stable.pyd (+ DLLs),
+# loaded by torch at run time rather than imported, so PyInstaller's hook misses them; without
+# them YOLO fails with "operator torchvision::nms does not exist".
+import torchvision as _tv
+_tv_dir = os.path.dirname(_tv.__file__)
+binaries_tv = [(os.path.join(_tv_dir, f), "torchvision") for f in os.listdir(_tv_dir)
+               if f.lower().endswith((".pyd", ".dll"))]
+
 # ultralytics reads its YAML configs at run time; PyMuPDF ships native resources.
 for package in ("ultralytics", "pymupdf"):
     d, b, h = collect_all(package)
     datas += d
     binaries += b
     hiddenimports += h
+binaries += binaries_tv
 
 # transformers imports model classes lazily by name -- collect the families the app uses.
 for module in ("transformers.models.auto", "transformers.models.bart",
