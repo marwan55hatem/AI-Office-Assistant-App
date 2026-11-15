@@ -69,6 +69,20 @@ in-memory rate limits assume **one** service instance (see `app/services/chat_hu
    (release list rate limit), `DOWNLOAD_URL` (installer link instead of the GitHub release's).
 3. Deploy, then set the service's `CORS_ORIGINS` and `APP_LINK_URL` to the website's final address.
 
+### Both on Railway (the test deployment of 2026-11-13)
+
+Render asks for a card even on its free plan, so the test deployment runs on Railway's trial (no card),
+with the database on Neon. Two services from the same GitHub repository, branch `cloud-upgrade`:
+
+| service | root directory | settings |
+|---|---|---|
+| the API | `/backend` (Dockerfile) | health check `/health/ready`; variables of section 2. `JWT_SECRET`, `APP_ROLE_PASSWORD` and `WEB_PROXY_SECRET` as `${{secret(48)}}`-style generated values; `CORS_ORIGINS` and `APP_LINK_URL` built from `${{<website service>.RAILWAY_PUBLIC_DOMAIN}}` |
+| the website | `/website` (not `/website/src`) | `API_URL` and `SITE_URL` from the two public domains; `WEB_PROXY_SECRET=${{<API service>.WEB_PROXY_SECRET}}` |
+
+Generate a public domain for each service (*Settings → Networking*). The trial credit runs out after a
+few days; the services then stop until a plan is chosen, and an installer built for the Railway address
+has to be rebuilt if the service moves to another host.
+
 ## 5. Point the desktop app at the service
 
 The installer is built with the service address (`packaging/build.ps1 -ApiUrl https://<service>`).

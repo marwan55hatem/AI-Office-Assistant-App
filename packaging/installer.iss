@@ -28,7 +28,10 @@ OutputDir={#OutDir}
 OutputBaseFilename=OfficeAssistant-Setup
 SetupIconFile=..\assets\icons\app.ico
 UninstallDisplayIcon={app}\{#MyAppExe}
-Compression=lzma2/ultra64
+; max + 4 threads packs the ~8 GB payload in a fraction of the time of ultra64 on one core; the
+; payload is mostly model weights, which barely shrink at any level.
+Compression=lzma2/max
+LZMANumBlockThreads=4
 SolidCompression=no
 LZMAUseSeparateProcess=yes
 ; The payload is larger than 4 GB: split into Setup.exe + .bin parts.

@@ -433,3 +433,31 @@ types and 28 unit tests clean.
 
 **Still open (needs the owner)**: hosting accounts and the deploy, the Groq key and Resend domain in
 production, the backup secrets, the installer build with the final address, the `v2.0.0` tag and release.
+
+## Phase 9 — test deployment and installer (2026-11-13 to 2026-11-15)
+
+**Deployment (test)**: the service and the website run on Railway's trial (no card; Render, Hugging Face
+Spaces and Google Cloud all ask for one), the database on Neon (US East 1), both built from branch
+`cloud-upgrade`. Checked live: `/health/ready` reports the database, `/docs` is off, http redirects to
+https, the website's proxy reaches the service and its CSP allows the service's `wss://` address. The
+steps are in [PRODUCTION.md](PRODUCTION.md).
+
+**Service**
+- `scripts/start.py` builds `DATABASE_URL` from the owner's link and `APP_ROLE_PASSWORD`, and accepts
+  `postgres://` / `postgresql://` links as hosts show them.
+- `scripts/create_app_role.py`: an existing role only gets its new password (Neon refuses `ALTER ROLE` with
+  attribute clauses); its limits are checked instead (no superuser, no BYPASSRLS). Errors never print the
+  statement, which contains the password.
+
+**Desktop**
+- Local addresses use `127.0.0.1`: `localhost` cost about 2 s per new connection on Windows (IPv6 first).
+- Installer: torchvision 0.29's compiled operators (`_C_stable.pyd`, `image_stable.pyd`) are bundled
+  explicitly — PyInstaller's hook misses them and the frozen summariser and translator failed without them.
+  The outdated v1 SQLite self-test left the build; compression is `lzma2/max` on 4 threads (20 minutes
+  instead of over an hour).
+- Built for the Railway address: bundle 8.4 GB, frozen self-check 5 of 5, installer 5.65 GB
+  (`OfficeAssistant-Setup.exe` + 4 `.bin` parts). Not signed; not yet installed on a clean PC.
+
+**Still open**: the Railway trial ends within days (a plan, or another host and a rebuilt installer); about
+1 in 6 new connections from the build PC to the Railway service timed out on 2026-11-15; the backup
+secrets; the `v2.0.0` tag and release; a verified Resend domain.
