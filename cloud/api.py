@@ -20,7 +20,11 @@ from cloud.credentials import CredentialStore
 
 logger = logging.getLogger(__name__)
 
-TIMEOUT = httpx.Timeout(10.0, connect=4.0)
+CONNECT_TIMEOUT = 2.0                      # a healthy connection opens in well under a second
+TIMEOUT = httpx.Timeout(10.0, connect=CONNECT_TIMEOUT)
+# A connection that could not be opened is tried again (nothing was sent yet, so this is safe for
+# every method): hosts occasionally drop a new connection, which would otherwise show as "offline".
+CONNECT_RETRIES = 2
 
 
 class ApiError(Exception):
@@ -63,7 +67,8 @@ def _message(response: httpx.Response) -> str:
 class ApiClient:
     def __init__(self, base_url: str, http: httpx.Client | None = None, credentials=None):
         self.base_url = base_url.rstrip("/")
-        self.http = http or httpx.Client(base_url=self.base_url, timeout=TIMEOUT)
+        self.http = http or httpx.Client(base_url=self.base_url, timeout=TIMEOUT,
+                                         transport=httpx.HTTPTransport(retries=CONNECT_RETRIES))
         self.credentials = credentials if credentials is not None else CredentialStore(self.base_url)
         self._access_token: str | None = None
         self._refresh_token: str | None = None
@@ -138,7 +143,7 @@ class ApiClient:
             headers = {"Authorization": f"Bearer {self._access_token}", "Accept": "text/event-stream"}
             try:
                 with self.http.stream("POST", path, json=body, headers=headers,
-                                      timeout=httpx.Timeout(120.0, connect=4.0)) as response:
+                                      timeout=httpx.Timeout(120.0, connect=CONNECT_TIMEOUT)) as response:
                     self._set_online(True)
                     if response.status_code == 401 and attempt == 1:
                         response.read()
